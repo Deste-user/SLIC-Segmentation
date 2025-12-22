@@ -1,0 +1,22 @@
+# Build directories
+cmake-build-*/
+build/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Compiled files
+*.o
+*.so
+*.dylib
+*.exe
+
+# macOS
+.DS_Store
+
+# Large dataset files (opzionale)
+archive/images/
+archive/ground_truth/
