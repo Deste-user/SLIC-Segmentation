@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <random>
+#include "SLIC_common.h"
 #define PATH_images "/Users/marcodestefano/CLionProjects/SLIC Segmentation Algorithm/archive/images/test/"
 
 struct SuperPixel {
@@ -116,27 +117,6 @@ void Initialization(Pixel* pxls, SuperPixel* spxs ,int S, int rows, int cols, in
     }
 }
 
-//Da vedere se mettere in un file.
-double distance_SLIC(float centroid_L,float centroid_A, float centroid_B, int centroid_x, int centroid_y, float pxl_L,
-    float pxl_A,float pxl_B, int pxl_x, int pxl_y,int S, int m) {
-    // Calculate the distance of LAB
-    double d_color= std::sqrt(
-        (centroid_L - pxl_L) * (centroid_L - pxl_L) +
-        (centroid_A - pxl_A) * (centroid_A - pxl_A) +
-        (centroid_B - pxl_B) * (centroid_B - pxl_B)
-    );
-
-    // Calculate spatial distance
-    double d_spatial = std::sqrt(
-        (centroid_x - pxl_x) * (centroid_x - pxl_x) +
-        (centroid_y - pxl_y) * (centroid_y - pxl_y)
-    );
-
-    // Distance SLIC
-    double d = std::sqrt(d_color * d_color + (d_spatial / S * m) * (d_spatial / S * m));
-    return d;
-}
-
 void iteration(Pixel* pxls, SuperPixel* spxls, int S, int rows, int cols, int K, int m) {
 
     for (int k=0; k<K;k++) {
@@ -215,32 +195,7 @@ void run(Pixel* pxls, SuperPixel* spxls,int rows, int cols,int K, int m, int ite
     }
 }
 
-// Vedere se mettere in un file a parte.
-std::string get_random_image_path(const std::string& folder_path) {
-    std::vector<std::string> valid_images;
-    for (const auto& entry : std::filesystem::directory_iterator(folder_path)) {
-        if (entry.is_regular_file()) {
-            std::string ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-            if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp") {
-                valid_images.push_back(entry.path().string());
-            }
-        }
-    }
 
-    if (valid_images.empty()) {
-        std::cerr << "Nessuna immagine trovata nella cartella!" << std::endl;
-        return "";
-    }
-
-    // Modern random generator (better than rand())
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> distrib(0, valid_images.size() - 1);
-
-    int random_index = distrib(gen);
-    return valid_images[random_index];
-}
 
 cv::Mat display_boundaries(Pixel* pxls, SuperPixel* spxs, int rows, int cols) {
     cv::Mat lab_mat(rows, cols, CV_8UC3);
@@ -275,10 +230,10 @@ int main() {
     std::string img_path = get_random_image_path(PATH_images);
 
     cv::Mat image = cv::imread(img_path);
+    cv::imshow("Original Image", image);
     if (image.empty()) return -1;
     cv::Mat image_lab;
     cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
-    int K = 100;
     int N = image_lab.cols * image_lab.rows;
     Pixel* pxls= (Pixel*) malloc(image_lab.cols * image_lab.rows * sizeof(Pixel));
     SuperPixel* spxs= (SuperPixel*) malloc(K * sizeof(SuperPixel));
