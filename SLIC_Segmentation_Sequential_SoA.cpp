@@ -1,7 +1,12 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <filesystem>
+#include <vector>
+#include <string>
+#include <random>
+#define PATH_images "/Users/marcodestefano/CLionProjects/SLIC Segmentation Algorithm/archive/images/test/"
 
+namespace fs = std::filesystem;
 
 struct SuperPixels {
     int* label;
@@ -331,20 +336,61 @@ cv::Mat display_boundaries1(Image* img, SuperPixels* sp, int rows, int cols) {
 }
 
 
+
+// Funzione per ottenere un percorso immagine randomico
+std::string get_random_image_path(const std::string& folder_path) {
+    std::vector<std::string> valid_images;
+
+    // Controlla se la cartella esiste
+    if (!fs::exists(folder_path) || !fs::is_directory(folder_path)) {
+        std::cerr << "Errore: La cartella non esiste o il percorso è errato: " << folder_path << std::endl;
+        return "";
+    }
+
+    // Itera nella cartella
+    for (const auto& entry : fs::directory_iterator(folder_path)) {
+        if (entry.is_regular_file()) {
+            // Controlla l'estensione per evitare file nascosti tipo .DS_Store
+            std::string ext = entry.path().extension().string();
+            // Converti in lowercase per sicurezza
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp") {
+                valid_images.push_back(entry.path().string());
+            }
+        }
+    }
+
+    if (valid_images.empty()) {
+        std::cerr << "Nessuna immagine trovata nella cartella!" << std::endl;
+        return "";
+    }
+
+    // Generatore randomico moderno (meglio di rand())
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distrib(0, valid_images.size() - 1);
+
+    int random_index = distrib(gen);
+    return valid_images[random_index];
+}
+
 int main() {
-    cv::Mat image = cv::imread("/Users/marcodestefano/CLionProjects/SLIC Segmentation Algorithm/archive/images/test/100007.jpg");
+    std::string img_path = get_random_image_path(PATH_images);
+
+    cv::Mat image = cv::imread(img_path);
     if (image.empty()) return -1;
     cv::Mat image_lab;
     cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
     Image img{};
     SuperPixels superpixels{};
-    int K=1000;
+    int K=100;
     int S = Inizialization_structures(&img, &superpixels, image_lab, K);
 
     Initialization(&img, &superpixels,S,image_lab.rows, image_lab.cols,K);
     run(&img, &superpixels, S, image_lab.rows, image_lab.cols, K, 10);
 
-    cv::Mat output= display_boundaries(&img, &superpixels, image_lab.rows, image_lab.cols);
+    cv::Mat output= display_boundaries1(&img, &superpixels, image_lab.rows, image_lab.cols);
 
     free(img.L);
     free(img.A);
