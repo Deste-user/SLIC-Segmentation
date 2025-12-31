@@ -5,7 +5,7 @@
 #include <string>
 #include <random>
 #include "SLIC_common.h"
-#define PATH_images "/Users/marcodestefano/CLionProjects/SLIC Segmentation Algorithm/archive/images/test/"
+
 
 struct SuperPixel {
     int label;
