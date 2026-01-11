@@ -26,13 +26,26 @@ struct Image {
 
 
 class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
+    private:
+    Image* img;
+    SuperPixels* super_pixels;
     public:
     std::string get_name() const override {return "SOA Parallel SLIC";}
     DataLayout get_data_layout() const override {return DataLayout::SoA;}
     bool is_parallel() const override {return true;}
 
-    void Initialization_Structures(Image* img, SuperPixels* super_pixels, cv::Mat image_lab, int K) {
-        int N = image_lab.cols * image_lab.rows;
+    SLIC_Algorithm_SoA_Parallel(cv::Mat image_lab, int K, int m, int iterations) {
+        this->image_lab= image_lab;
+        this->N = image_lab.cols * image_lab.rows;
+        this->K = K;
+        this->m = m;
+        this->num_iterations = iterations;
+        this->S = (int) std::sqrt((double) (image_lab.rows * image_lab.cols) / K);
+        int cols_steps = image_lab.cols / S;
+        int rows_steps = image_lab.rows / S;
+        this->K = rows_steps * cols_steps;
+        this->img= new Image();
+        this->super_pixels= new SuperPixels();
 
         img->L = (float*) malloc(N * sizeof(float));
         img->A = (float*) malloc(N * sizeof(float));
@@ -48,9 +61,6 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         int cols = image_lab.cols;
         int rows = image_lab.rows;
 
-        // PARALLELIZZAZIONE OTTIMIZZATA
-        // collapse(2): fonde y e x in un unico ciclo da 0 a N
-        // Non serve 'private(idx)' se dichiariamo le variabili dentro
         #pragma omp parallel for collapse(2) schedule(static)
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < cols; x++) {
@@ -86,15 +96,15 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         }
     }
 
-    int calculate_gradient(Image* img, int x, int y, const int cols,const int rows) {
+    float calculate_gradient(int x, int y) override {
     int gradient = 0;
 
-    if (x <= 0 || x >= cols - 1 || y <= 0 || y >= rows) return INT_MAX;
+    if (x <= 0 || x >= this->image_lab.cols - 1 || y <= 0 || y >= this->image_lab.rows) return INT_MAX;
 
-    int idx_right = y * cols + (x + 1);
-    int idx_left = y * cols + (x - 1);
-    int idx_down = (y + 1) * cols + x;
-    int idx_up = (y - 1) * cols + x;
+    int idx_right = y * this->image_lab.cols + (x + 1);
+    int idx_left = y * this->image_lab.cols + (x - 1);
+    int idx_down = (y + 1) * this->image_lab.cols + x;
+    int idx_up = (y - 1) * this->image_lab.cols + x;
 
     // Differences L
     float diff_x_L = img->L[idx_right] - img->L[idx_left];
@@ -115,8 +125,8 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
     return gradient;
 }
 
-    int EnforceConnectivity(Image* img, const int rows, const int cols, int K) {
-        int num_pixels = rows * cols;
+    int EnforceConnectivity() {
+        int num_pixels = this->N;
 
         // Nuova matrice per le label "pulite"
         // Inizializzata a -1 (non visitato)
@@ -142,9 +152,9 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         int adj_label = 0; // Label del vicino a cui unirsi
         int final_label_count = 0; // Contatore per le nuove label sequenziali
 
-        for (int y = 0; y < rows; y++) {
-            for (int x = 0; x < cols; x++) {
-                int idx = y * cols + x;
+        for (int y = 0; y < this->image_lab.rows; y++) {
+            for (int x = 0; x < this->image_lab.cols; x++) {
+                int idx = y * this->image_lab.cols + x;
 
                 // Se il pixel non è ancora stato processato nella nuova mappa
                 if (new_labels[idx] < 0) {
@@ -169,7 +179,7 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
 
                     // Controllo rapido vicini (sinistra e sopra) per trovare un "genitore"
                     if (x > 0 && new_labels[idx - 1] >= 0) best_adj_label = new_labels[idx - 1];
-                    else if (y > 0 && new_labels[idx - cols] >= 0) best_adj_label = new_labels[idx - cols];
+                    else if (y > 0 && new_labels[idx - this->image_lab.cols] >= 0) best_adj_label = new_labels[idx - this->image_lab.cols];
 
                     // --- INIZIO BFS/DFS ---
                     int vec_idx = 0;
@@ -185,8 +195,8 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
                             int ny = cy + dy[d];
 
                             // Controllo confini
-                            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                                int n_idx = ny * cols + nx;
+                            if (nx >= 0 && nx < this->image_lab.cols && ny >= 0 && ny < this->image_lab.rows) {
+                                int n_idx = ny * this->image_lab.cols + nx;
 
                                 // Se ha label originale non ancora visitata
                                 if (new_labels[n_idx] < 0 && img->labels[n_idx] == current_label) {
@@ -208,7 +218,7 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
                         int target_label = (best_adj_label >= 0) ? best_adj_label : adj_label;
 
                         for (size_t k = 0; k < x_vec.size(); k++) {
-                            int r_idx = y_vec[k] * cols + x_vec[k];
+                            int r_idx = y_vec[k] * this->image_lab.cols + x_vec[k];
                             new_labels[r_idx] = target_label;
                         }
                         // Non incrementiamo final_label_count perché questo gruppo è sparito
@@ -236,19 +246,19 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         return final_label_count;
     }
 
-    void Initialization(Image* img,SuperPixels* sp ,int S, const int rows, const int cols, int K) {
+    void Initialization() override{
 
         #pragma omp parallel for collapse(2) schedule(static)
-        for (int y = S/2 ; y < rows; y += S) {
-            for (int x = S/2 ; x < cols; x += S) {
-                int idx = x + cols*y;
-                int i = (y / S) * (cols / S) + (x / S);
+        for (int y = S/2 ; y < this->image_lab.rows; y += S) {
+            for (int x = S/2 ; x < this->image_lab.cols; x += S) {
+                int idx = x + this->image_lab.cols*y;
+                int i = (y / S) * (this->image_lab.cols / S) + (x / S);
                 if (i >= K) continue;
-                sp->centroid_x[i] = x;
-                sp->centroid_y[i] = y;
-                sp->val_L[i] = img->L[idx];
-                sp->val_a[i] = img->A[idx];
-                sp->val_b[i] = img->B[idx];
+                super_pixels->centroid_x[i] = x;
+                super_pixels->centroid_y[i] = y;
+                super_pixels->val_L[i] = img->L[idx];
+                super_pixels->val_a[i] = img->A[idx];
+                super_pixels->val_b[i] = img->B[idx];
             }
         }
 
@@ -256,15 +266,15 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         #pragma omp parallel for schedule(static)
         for (int k=0 ; k < K; k++) {
             int min_gradient = INT_MAX;
-            int best_x = sp->centroid_x[k];
-            int best_y = sp->centroid_y[k];
+            int best_x = super_pixels->centroid_x[k];
+            int best_y = super_pixels->centroid_y[k];
 
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
-                    int ny = sp->centroid_y[k] + dy;
-                    int nx = sp->centroid_x[k] + dx;
-                    if (nx > 0 && nx < cols - 1 && ny > 0 && ny < rows - 1) {
-                        int g = calculate_gradient(img, nx, ny, cols,rows);
+                    int ny = super_pixels->centroid_y[k] + dy;
+                    int nx = super_pixels->centroid_x[k] + dx;
+                    if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1) {
+                        int g = calculate_gradient(nx, ny);
                         if (g < min_gradient) {
                             min_gradient = g;
                             best_x = nx;
@@ -273,22 +283,22 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
                     }
                 }
             }
-            sp->centroid_x[k] = best_x;
-            sp->centroid_y[k] = best_y;
-            int idx = best_y*cols+best_x;
-            sp->val_L[k] = img->L[idx];
-            sp->val_a[k] = img->A[idx];
-            sp->val_b[k] = img->B[idx];
+            super_pixels->centroid_x[k] = best_x;
+            super_pixels->centroid_y[k] = best_y;
+            int idx = best_y*this->image_lab.cols+best_x;
+            super_pixels->val_L[k] = img->L[idx];
+            super_pixels->val_a[k] = img->A[idx];
+            super_pixels->val_b[k] = img->B[idx];
         }
     }
 
     // Use the pixel centric version - each pixel checks all superpixels in its 2Sx2S regio
-    void iteration(Image* img, SuperPixels* sp, int S, const int rows, const int cols, int K, int m){
+    void iteration() override {
         if (!this->use_tiling) {
 #pragma omp parallel for collapse(2) schedule(static)
-            for (int y=0;y<rows;y++) {
-                for (int x=0;x<cols;x++) {
-                    int idx = x + cols*y;
+            for (int y=0;y<this->image_lab.rows;y++) {
+                for (int x=0;x<this->image_lab.cols;x++) {
+                    int idx = x + this->image_lab.cols*y;
 
                     int grid_x = x / S;
                     int grid_y = y / S;
@@ -297,11 +307,11 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
                         for (int nx=-1; nx <= 1;nx++) {
                             int kx = grid_x + nx;
                             int ky = grid_y + ny;
-                            int k = ky * (cols / S) + kx;
+                            int k = ky * (this->image_lab.cols / S) + kx;
                             if (k < 0 || k >= K) continue;
-                            if (abs(sp->centroid_x[k] - x) < 2 * S &&
-                                    abs(sp->centroid_y[k] - y) < 2 * S) {
-                                double d = distance_SLIC(sp->val_L[k],sp->val_a[k],sp->val_b[k],sp->centroid_x[k], sp->centroid_y[k],
+                            if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
+                                    abs(super_pixels->centroid_y[k] - y) < 2 * S) {
+                                double d = distance_SLIC(super_pixels->val_L[k],super_pixels->val_a[k],super_pixels->val_b[k],super_pixels->centroid_x[k], super_pixels->centroid_y[k],
                                 img->L[idx],img->A[idx], img->B[idx], img->x[idx], img->y[idx],S,m);
 
                                 if (d < img->distances[idx]) {
@@ -317,14 +327,14 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
 #pragma omp parallel for collapse(2) schedule(static)
             // quando accedo ad una locazione, carico sulla cache un blocco di dati.
             // Di conseguenza accedo a blocchi di dati contigui per sfruttare la cache al meglio.
-            for (int by=0; by<rows; by += TILE_SIZE) {
-                for (int bx=0; bx<cols; bx += TILE_SIZE) {
-                    int y_end = std::min(by + TILE_SIZE, rows);
-                    int x_end = std::min(bx + TILE_SIZE, cols);
+            for (int by=0; by<this->image_lab.rows; by += TILE_SIZE) {
+                for (int bx=0; bx<this->image_lab.cols; bx += TILE_SIZE) {
+                    int y_end = std::min(by + TILE_SIZE, this->image_lab.rows);
+                    int x_end = std::min(bx + TILE_SIZE, this->image_lab.cols);
                     // Sfrutto la cache.
                     for (int y=by; y<y_end; y++) {
                         for (int x=bx; x<x_end; x++) {
-                            int idx = x + cols*y;
+                            int idx = x + this->image_lab.cols*y;
 
                             int grid_x = x / S;
                             int grid_y = y / S;
@@ -333,11 +343,11 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
                                 for (int nx=-1; nx <= 1;nx++) {
                                     int kx = grid_x + nx;
                                     int ky = grid_y + ny;
-                                    int k = ky * (cols / S) + kx;
+                                    int k = ky * (this->image_lab.cols / S) + kx;
                                     if (k < 0 || k >= K) continue;
-                                    if (abs(sp->centroid_x[k] - x) < 2 * S &&
-                                            abs(sp->centroid_y[k] - y) < 2 * S) {
-                                        double d = distance_SLIC(sp->val_L[k],sp->val_a[k],sp->val_b[k],sp->centroid_x[k], sp->centroid_y[k],
+                                    if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
+                                            abs(super_pixels->centroid_y[k] - y) < 2 * S) {
+                                        double d = distance_SLIC(super_pixels->val_L[k],super_pixels->val_a[k],super_pixels->val_b[k],super_pixels->centroid_x[k], super_pixels->centroid_y[k],
                                                                  img->L[idx],img->A[idx], img->B[idx], img->x[idx], img->y[idx],S,m);
 
                                         if (d < img->distances[idx]) {
@@ -355,7 +365,7 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         }
     }
 
-    void update_centroids(Image* img, SuperPixels* sp, const int rows, const int cols, int K) {
+    void update_centroids() override{
         // Array per accumulatori
         double* global_sum_x = (double*)calloc(K, sizeof(double));
         double* global_sum_y = (double*)calloc(K, sizeof(double));
@@ -363,7 +373,7 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         double* global_sum_a = (double*)calloc(K, sizeof(double));
         double* global_sum_b = (double*)calloc(K, sizeof(double));
         int* global_count = (int*)calloc(K, sizeof(int));
-        const int N = rows*cols;
+
 
         // Se faccio la parallelizzazione qui, si può verificare race conditions
     #pragma omp parallel
@@ -412,11 +422,11 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         #pragma omp parallel for schedule(static)
         for (int k=0; k < K; k++) {
             if (global_count[k] > 0) {
-                sp->centroid_x[k] = (int)(global_sum_x[k] / global_count[k]);
-                sp->centroid_y[k] = (int)(global_sum_y[k] / global_count[k]);
-                sp->val_L[k] = (float)(global_sum_L[k] / global_count[k]);
-                sp->val_a[k] = (float)(global_sum_a[k] / global_count[k]);
-                sp->val_b[k] = (float)(global_sum_b[k] / global_count[k]);
+                super_pixels->centroid_x[k] = (int)(global_sum_x[k] / global_count[k]);
+                super_pixels->centroid_y[k] = (int)(global_sum_y[k] / global_count[k]);
+                super_pixels->val_L[k] = (float)(global_sum_L[k] / global_count[k]);
+                super_pixels->val_a[k] = (float)(global_sum_a[k] / global_count[k]);
+                super_pixels->val_b[k] = (float)(global_sum_b[k] / global_count[k]);
             }
         }
 
@@ -430,19 +440,19 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
     }
 
     // Non parallelizzo questa funzione. Mi serve solo per visualizzare meglio l'output
-    cv::Mat display_boundaries(Image* img, SuperPixels* sp, int rows, int cols) {
+    cv::Mat display_boundaries() {
         // Crea immagine con colori medi dei superpixel
-        cv::Mat lab_mat(rows, cols, CV_8UC3);
+        cv::Mat lab_mat(this->image_lab.rows, this->image_lab.cols, CV_8UC3);
 
-        for (int y = 0; y < rows; y++) {
-            for (int x = 0; x < cols; x++) {
-                int idx = y * cols + x;
+        for (int y = 0; y < this->image_lab.rows; y++) {
+            for (int x = 0; x < this->image_lab.cols; x++) {
+                int idx = y * this->image_lab.cols + x;
                 int label = img->labels[idx];
 
                 if (label >= 0) {
-                    lab_mat.at<cv::Vec3b>(y, x)[0] = (uchar)sp->val_L[label];
-                    lab_mat.at<cv::Vec3b>(y, x)[1] = (uchar)sp->val_a[label];
-                    lab_mat.at<cv::Vec3b>(y, x)[2] = (uchar)sp->val_b[label];
+                    lab_mat.at<cv::Vec3b>(y, x)[0] = (uchar)super_pixels->val_L[label];
+                    lab_mat.at<cv::Vec3b>(y, x)[1] = (uchar)super_pixels->val_a[label];
+                    lab_mat.at<cv::Vec3b>(y, x)[2] = (uchar)super_pixels->val_b[label];
                 }
             }
         }
@@ -452,11 +462,11 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         cv::cvtColor(lab_mat, output, cv::COLOR_Lab2BGR);
 
         // Disegna bordi neri
-        for (int y = 0; y < rows - 1; y++) {
-            for (int x = 0; x < cols - 1; x++) {
-                int idx = y * cols + x;
+        for (int y = 0; y < this->image_lab.rows - 1; y++) {
+            for (int x = 0; x < this->image_lab.cols - 1; x++) {
+                int idx = y * this->image_lab.cols + x;
                 int idx_right = idx + 1;
-                int idx_down = idx + cols;
+                int idx_down = idx + this->image_lab.cols;
 
                 // Controlla se il pixel è sul bordo di un superpixel
                 if (img->labels[idx] != img->labels[idx_right] ||
@@ -467,31 +477,31 @@ class SLIC_Algorithm_SoA_Parallel : public SLIC_Algorithm {
         }
 
         // Gestisci ultima riga
-        for (int x = 0; x < cols - 1; x++) {
-            int idx = (rows - 1) * cols + x;
+        for (int x = 0; x < this->image_lab.cols - 1; x++) {
+            int idx = (this->image_lab.rows - 1) * this->image_lab.cols + x;
             if (img->labels[idx] != img->labels[idx + 1]) {
-                output.at<cv::Vec3b>(rows - 1, x) = cv::Vec3b(0, 0, 0);
+                output.at<cv::Vec3b>(this->image_lab.rows - 1, x) = cv::Vec3b(0, 0, 0);
             }
         }
 
         // Gestisci ultima colonna
-        for (int y = 0; y < rows - 1; y++) {
-            int idx = y * cols + (cols - 1);
-            if (img->labels[idx] != img->labels[idx + cols]) {
-                output.at<cv::Vec3b>(y, cols - 1) = cv::Vec3b(0, 0, 0);
+        for (int y = 0; y < this->image_lab.rows - 1; y++) {
+            int idx = y * this->image_lab.cols + (this->image_lab.cols - 1);
+            if (img->labels[idx] != img->labels[idx + this->image_lab.cols]) {
+                output.at<cv::Vec3b>(y, this->image_lab.cols - 1) = cv::Vec3b(0, 0, 0);
             }
         }
 
         return output;
     }
 
-    void run(Image* img, SuperPixels* sp,int S, const int row, const int cols, int K,int num_iterations = 10) {
-        Initialization(img, sp, S, row, cols, K);
+    void run() {
+        Initialization();
         for (int i = 0; i < num_iterations; i++) {
-            iteration(img,sp, S, row, cols, K, 10);
-            update_centroids(img, sp, row, cols, K);
+            iteration();
+            update_centroids();
         }
-        int real_num_labels = EnforceConnectivity(img, row, cols, K);
-        update_centroids(img, sp, row, cols, real_num_labels);
+        this->K = EnforceConnectivity();
+        update_centroids();
     }
 };

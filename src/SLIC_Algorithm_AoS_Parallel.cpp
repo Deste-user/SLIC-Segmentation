@@ -10,6 +10,7 @@ struct SuperPixel {
     float val_a;
     float val_b;
 };
+
 struct Pixel {
     int label;
     int x;
@@ -20,25 +21,20 @@ struct Pixel {
     float B;
 };
 
-class SLIC_Algorithm_Parallel_AoS: public SLIC_Algorithm {
+class SLIC_Algorithm_Parallel_AoS : public SLIC_Algorithm {
 private:
-    Pixel* pxls;
-    SuperPixel* spxls;
-    cv::Mat image_lab;
-    int K;
-    int N;
-    int S;
-    int m;
-    int num_iterations;
+    Pixel *pxls;
+    SuperPixel *spxls;
 
 public:
-    std::string get_name() const override {return "AoS Parallel SLIC";}
-    DataLayout get_data_layout() const override {return DataLayout::AoS;}
-    bool is_parallel() const override {return true;}
+    std::string get_name() const override { return "AoS Parallel SLIC"; }
+    DataLayout get_data_layout() const override { return DataLayout::AoS; }
+    bool is_parallel() const override { return true; }
+
     float calculate_gradient(int x, int y) override {
         float gradient = 0.0f;
 
-        if (x<=0 || x >= this->image_lab.cols -1 || y <=0 || y >= image_lab.rows -1) return FLT_MAX;
+        if (x <= 0 || x >= this->image_lab.cols - 1 || y <= 0 || y >= image_lab.rows - 1) return FLT_MAX;
 
         int idx_right = y * image_lab.cols + (x + 1);
         int idx_left = y * image_lab.cols + (x - 1);
@@ -63,24 +59,25 @@ public:
 
         return gradient;
     }
+
     SLIC_Algorithm_Parallel_AoS(cv::Mat image_lab, int K, int m, int iterations) {
-        this->N= image_lab.cols * image_lab.rows;
-        this->K= K;
-        this->m= m;
-        this->image_lab= image_lab;
-        this->num_iterations= iterations;
-        pxls= (Pixel*) malloc(N * sizeof(Pixel));
-        this->S = (int)std::sqrt((double)(image_lab.rows*image_lab.cols) / K);
+        this->N = image_lab.cols * image_lab.rows;
+        this->K = K;
+        this->m = m;
+        this->image_lab = image_lab;
+        this->num_iterations = iterations;
+        pxls = (Pixel *) malloc(N * sizeof(Pixel));
+        this->S = (int) std::sqrt((double) (image_lab.rows * image_lab.cols) / K);
         int cols_steps = image_lab.cols / S;
         int rows_steps = image_lab.rows / S;
-        this->K= rows_steps * cols_steps;
-        spxls= (SuperPixel*) malloc(this->K * sizeof(SuperPixel));
+        this->K = rows_steps * cols_steps;
+        spxls = (SuperPixel *) malloc(this->K * sizeof(SuperPixel));
 
         // Linearization of the Image.
-        #pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(2)
         for (int y = 0; y < image_lab.rows; y++) {
             for (int x = 0; x < image_lab.cols; x++) {
-                int idx= y * image_lab.cols + x;
+                int idx = y * image_lab.cols + x;
                 cv::Vec3b pixel = image_lab.at<cv::Vec3b>(y, x);
                 pxls[idx].distance = MAXFLOAT;
                 pxls[idx].label = -1;
@@ -93,21 +90,23 @@ public:
         }
 
         //To inizialize the labels of all super pixels
-        #pragma omp parallel for schedule(static)
-        for (int i=0; i < K; i++) {
+#pragma omp parallel for schedule(static)
+        for (int i = 0; i < K; i++) {
             spxls[i].label = i;
         }
     }
+
     ~SLIC_Algorithm_Parallel_AoS() {
         free(pxls);
         free(spxls);
     }
-    void Initialization() override{
+
+    void Initialization() override {
         // To initialize the centroids of superpixels in a grid pattern
-        #pragma omp parallel for collapse(2) schedule(static)
-        for (int y = S/2 ; y < this->image_lab.rows; y += S) {
-            for (int x = S/2 ; x < this->image_lab.cols; x += S) {
-                int idx= x + this->image_lab.cols*y;
+#pragma omp parallel for collapse(2) schedule(static)
+        for (int y = S / 2; y < this->image_lab.rows; y += S) {
+            for (int x = S / 2; x < this->image_lab.cols; x += S) {
+                int idx = x + this->image_lab.cols * y;
                 int i = (y / S) * (this->image_lab.cols / S) + (x / S);
                 if (i >= K) continue;
                 spxls[i].centroid_x = x;
@@ -119,27 +118,27 @@ public:
         }
 
         // To adjust centroids to the lowest gradient position in a 3x3 neighborhood
-        #pragma omp parallel for schedule(static)
-        for (int k=0; k<this->K; k++) {
-            float min_gradient= FLT_MAX;
-            int best_x= spxls[k].centroid_x;
-            int best_y= spxls[k].centroid_y;
-            for (int dy=-1; dy< 1; dy++) {
-                for (int dx=-1; dx<1;dx++) {
-                    int ny= spxls[k].centroid_y + S*dy;
-                    int nx= spxls[k].centroid_x + S*dx;
-                    if (nx > 0 && nx < this->image_lab.cols -1 && ny > 0 && ny < this->image_lab.rows -1) {
-                        float g= calculate_gradient(nx, ny);
+#pragma omp parallel for schedule(static)
+        for (int k = 0; k < this->K; k++) {
+            float min_gradient = FLT_MAX;
+            int best_x = spxls[k].centroid_x;
+            int best_y = spxls[k].centroid_y;
+            for (int dy = -1; dy < 1; dy++) {
+                for (int dx = -1; dx < 1; dx++) {
+                    int ny = spxls[k].centroid_y + S * dy;
+                    int nx = spxls[k].centroid_x + S * dx;
+                    if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1) {
+                        float g = calculate_gradient(nx, ny);
                         if (g < min_gradient) {
-                            min_gradient= g;
-                            best_x= nx;
-                            best_y= ny;
+                            min_gradient = g;
+                            best_x = nx;
+                            best_y = ny;
                         }
                     }
                 }
             }
-            spxls[k].centroid_x= best_x;
-            spxls[k].centroid_y= best_y;
+            spxls[k].centroid_x = best_x;
+            spxls[k].centroid_y = best_y;
         }
     }
 
@@ -306,114 +305,112 @@ public:
         free(global_sum_b);
         free(global_count);
     }
-    int EnforceConnectivity() override{
 
-    // 1. Inizializzazione Array Label Pulite
-    int* new_labels = (int*)malloc(N * sizeof(int));
-    for(int i=0; i<N; i++) new_labels[i] = -1;
+    int EnforceConnectivity() override {
+        // 1. Inizializzazione Array Label Pulite
+        int *new_labels = (int *) malloc(N * sizeof(int));
+        for (int i = 0; i < N; i++) new_labels[i] = -1;
 
-    // Parametri
-    const int dx[] = {1, -1, 0, 0};
-    const int dy[] = {0, 0, 1, -1};
-    const int SUPPIXEL_SIZE = N / K;
-    const int MIN_SIZE = SUPPIXEL_SIZE >> 2;
+        // Parametri
+        const int dx[] = {1, -1, 0, 0};
+        const int dy[] = {0, 0, 1, -1};
+        const int SUPPIXEL_SIZE = N / K;
+        const int MIN_SIZE = SUPPIXEL_SIZE >> 2;
 
-    int final_label_count = 0;
-    int adj_label = 0; // Label di fallback per unire i piccoli pezzi
+        int final_label_count = 0;
+        int adj_label = 0; // Label di fallback per unire i piccoli pezzi
 
-    std::vector<int> x_vec;
-    std::vector<int> y_vec;
-    x_vec.reserve(SUPPIXEL_SIZE * 4);
-    y_vec.reserve(SUPPIXEL_SIZE * 4);
+        std::vector<int> x_vec;
+        std::vector<int> y_vec;
+        x_vec.reserve(SUPPIXEL_SIZE * 4);
+        y_vec.reserve(SUPPIXEL_SIZE * 4);
 
-    // 2. Scorro l'immagine (PRIMA Y POI X per performance!)
-    for (int y = 0; y < this->image_lab.rows; y++) {
-        for (int x = 0; x < this->image_lab.cols; x++) {
-            int idx = y * this->image_lab.cols + x;
+        // 2. Scorro l'immagine (PRIMA Y POI X per performance!)
+        for (int y = 0; y < this->image_lab.rows; y++) {
+            for (int x = 0; x < this->image_lab.cols; x++) {
+                int idx = y * this->image_lab.cols + x;
 
-            // Se il pixel non è ancora stato processato
-            if (new_labels[idx] < 0) {
+                // Se il pixel non è ancora stato processato
+                if (new_labels[idx] < 0) {
+                    // Salviamo la label che stiamo tracciando
+                    int current_label = pxls[idx].label;
 
-                // Salviamo la label che stiamo tracciando
-                int current_label = pxls[idx].label;
+                    // Prepariamo la BFS
+                    x_vec.clear();
+                    y_vec.clear();
+                    x_vec.push_back(x);
+                    y_vec.push_back(y);
 
-                // Prepariamo la BFS
-                x_vec.clear();
-                y_vec.clear();
-                x_vec.push_back(x);
-                y_vec.push_back(y);
+                    // Assegniamo provvisoriamente la nuova label corrente
+                    new_labels[idx] = final_label_count;
 
-                // Assegniamo provvisoriamente la nuova label corrente
-                new_labels[idx] = final_label_count;
+                    int count = 1;
+                    int best_adj_label = -1;
 
-                int count = 1;
-                int best_adj_label = -1;
+                    // CORREZIONE 4: Trova un vicino valido (Sinistra o Sopra)
+                    // idx-1 è il pixel a sinistra, idx-cols è quello sopra
+                    if (x > 0 && new_labels[idx - 1] >= 0) {
+                        best_adj_label = new_labels[idx - 1];
+                    } else if (y > 0 && new_labels[idx - this->image_lab.cols] >= 0) {
+                        best_adj_label = new_labels[idx - this->image_lab.cols];
+                    }
 
-                // CORREZIONE 4: Trova un vicino valido (Sinistra o Sopra)
-                // idx-1 è il pixel a sinistra, idx-cols è quello sopra
-                if (x > 0 && new_labels[idx - 1] >= 0) {
-                    best_adj_label = new_labels[idx - 1];
-                } else if (y > 0 && new_labels[idx - this->image_lab.cols] >= 0) {
-                    best_adj_label = new_labels[idx - this->image_lab.cols];
-                }
+                    // --- INIZIO BFS ---
+                    int vec_idx = 0;
+                    while (vec_idx < x_vec.size()) {
+                        // Si estrae il pixel corrente
+                        int cx = x_vec[vec_idx];
+                        int cy = y_vec[vec_idx];
+                        vec_idx++;
+                        // Controlla i 4 vicini
+                        for (int d = 0; d < 4; d++) {
+                            int nx = cx + dx[d];
+                            int ny = cy + dy[d];
 
-                // --- INIZIO BFS ---
-                int vec_idx = 0;
-                while(vec_idx < x_vec.size()){
-                    // Si estrae il pixel corrente
-                    int cx = x_vec[vec_idx];
-                    int cy = y_vec[vec_idx];
-                    vec_idx++;
-                    // Controlla i 4 vicini
-                    for (int d = 0; d < 4; d++) {
-                        int nx = cx + dx[d];
-                        int ny = cy + dy[d];
+                            if (nx >= 0 && nx < this->image_lab.cols && ny >= 0 && ny < this->image_lab.rows) {
+                                int n_idx = ny * this->image_lab.cols + nx;
 
-                        if (nx >= 0 && nx < this->image_lab.cols && ny >= 0 && ny < this->image_lab.rows) {
-                            int n_idx = ny * this->image_lab.cols + nx;
-
-                            // Se ha la stessa label originale e non è ancora stato visitato
-                            if (new_labels[n_idx] < 0 && pxls[n_idx].label == current_label) {
-                                new_labels[n_idx] = final_label_count;
-                                x_vec.push_back(nx);
-                                y_vec.push_back(ny);
-                                count++;
+                                // Se ha la stessa label originale e non è ancora stato visitato
+                                if (new_labels[n_idx] < 0 && pxls[n_idx].label == current_label) {
+                                    new_labels[n_idx] = final_label_count;
+                                    x_vec.push_back(nx);
+                                    y_vec.push_back(ny);
+                                    count++;
+                                }
                             }
                         }
                     }
-                }
-                // --- FINE BFS ---
+                    // --- FINE BFS ---
 
-                if (count <= MIN_SIZE) {
-                    // TROPPO PICCOLO -> UNISCI AL VICINO
-                    // Se non abbiamo un vicino locale, usiamo l'ultimo valido globale
-                    int target_label = (best_adj_label >= 0) ? best_adj_label : adj_label;
+                    if (count <= MIN_SIZE) {
+                        // TROPPO PICCOLO -> UNISCI AL VICINO
+                        // Se non abbiamo un vicino locale, usiamo l'ultimo valido globale
+                        int target_label = (best_adj_label >= 0) ? best_adj_label : adj_label;
 
-                    // Rinomina tutti i pixel di questo piccolo gruppo
-                    for (size_t k = 0; k < x_vec.size(); k++) {
-                        int r_idx = y_vec[k] * this->image_lab.cols + x_vec[k];
-                        new_labels[r_idx] = target_label;
+                        // Rinomina tutti i pixel di questo piccolo gruppo
+                        for (size_t k = 0; k < x_vec.size(); k++) {
+                            int r_idx = y_vec[k] * this->image_lab.cols + x_vec[k];
+                            new_labels[r_idx] = target_label;
+                        }
+                    } else {
+                        // ABBASTANZA GRANDE -> MANTIENI
+                        // Questo diventa il nuovo "vicino valido" per i prossimi
+                        adj_label = final_label_count;
+                        final_label_count++;
                     }
-                } else {
-                    // ABBASTANZA GRANDE -> MANTIENI
-                    // Questo diventa il nuovo "vicino valido" per i prossimi
-                    adj_label = final_label_count;
-                    final_label_count++;
                 }
             }
         }
-    }
 
-    // Copia finale
-    for(int i=0; i<N; i++) {
-        pxls[i].label = new_labels[i];
-    }
+        // Copia finale
+        for (int i = 0; i < N; i++) {
+            pxls[i].label = new_labels[i];
+        }
 
-    free(new_labels);
+        free(new_labels);
 
-    // Utile ritornare il numero reale di superpixel trovati
-    return final_label_count;
-
+        // Utile ritornare il numero reale di superpixel trovati
+        return final_label_count;
     }
 
 
@@ -429,12 +426,12 @@ public:
 
     cv::Mat display_boundaries() override {
         cv::Mat lab_mat(this->image_lab.rows, this->image_lab.cols, CV_8UC3);
-        for (int y = 0; y < this->image_lab.rows ; y++) {
-            for (int x = 0; x < this->image_lab.cols ; x++) {
+        for (int y = 0; y < this->image_lab.rows; y++) {
+            for (int x = 0; x < this->image_lab.cols; x++) {
                 int idx = y * this->image_lab.cols + x;
-                lab_mat.at<cv::Vec3b>(y, x)[0] = (uchar)spxls[pxls[idx].label].val_L;
-                lab_mat.at<cv::Vec3b>(y, x)[1] = (uchar)spxls[pxls[idx].label].val_a;
-                lab_mat.at<cv::Vec3b>(y, x)[2] = (uchar)spxls[pxls[idx].label].val_b;
+                lab_mat.at<cv::Vec3b>(y, x)[0] = (uchar) spxls[pxls[idx].label].val_L;
+                lab_mat.at<cv::Vec3b>(y, x)[1] = (uchar) spxls[pxls[idx].label].val_a;
+                lab_mat.at<cv::Vec3b>(y, x)[2] = (uchar) spxls[pxls[idx].label].val_b;
             }
         }
         cv::Mat output_mat;
@@ -454,12 +451,11 @@ public:
         }
 
         return output_mat;
-
     };
 };
 
 
-int main(){
+int main() {
     std::string img_path = get_random_image_path(PATH_images);
 
     cv::Mat image = cv::imread(img_path);
@@ -469,11 +465,9 @@ int main(){
 
     cv::Mat image_lab;
     cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
-    SLIC_Algorithm_Parallel_AoS slic_elab =SLIC_Algorithm_Parallel_AoS(image_lab, 600, 10,10);
+    SLIC_Algorithm_Parallel_AoS slic_elab = SLIC_Algorithm_Parallel_AoS(image_lab, 600, 10, 10);
     slic_elab.run();
-    cv::Mat output= slic_elab.display_boundaries();
+    cv::Mat output = slic_elab.display_boundaries();
     cv::imshow("SLIC Result Parallel AoS", output);
-
     cv::waitKey(0);
-
 }
