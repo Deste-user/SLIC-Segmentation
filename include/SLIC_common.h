@@ -1,12 +1,12 @@
 #ifndef SLIC_SEGMENTATION_ALGORITHM_SLIC_COMMON_H
 #define SLIC_SEGMENTATION_ALGORITHM_SLIC_COMMON_H
-#include <omp.h>
 #include <opencv2/opencv.hpp>
 #include <string>
 
 #define TILE_SIZE 64
-#define PATH_images "../archive/images/test/"
-#define PATH_example "/Users/marcodestefano/CLionProjects/SLIC Segmentation Algorithm/archive/images/test/2018.jpg"
+#define PATH_images "../archive/images/val/"
+#define PATH_images_test "../archive/images/test/"
+#define PATH_example "../archive/images/test/2018.jpg"
 
 enum DataLayout {
     AoS,
@@ -15,8 +15,8 @@ enum DataLayout {
 
 class SLIC_Algorithm{
 public:
-    bool use_tiling= false;
     virtual ~SLIC_Algorithm() = default;
+
     virtual std::string get_name() const = 0;
     virtual DataLayout get_data_layout() const = 0;
     virtual bool is_parallel() const = 0;
@@ -38,6 +38,10 @@ public:
     };
     void set_tiling(const bool val) {
         use_tiling = val;
+    }
+
+    void set_image_lab(const cv::Mat &image_lab) {
+        this->image_lab = image_lab;
     }
 
     bool use_tiling1() const {
@@ -67,14 +71,26 @@ public:
     int num_iterations_get() const {
         return num_iterations;
     }
+    void set_K(int new_K) {
+        this->K = new_K;
+    }
+
+    bool use_tiling{false};
 protected:
     cv::Mat image_lab;
-    int K;
-    int K_max;
-    int N;
-    int S;
-    int m;
-    int num_iterations;
+    int K{0};
+    int K_max{0};
+    int N{0};
+    int S{0};
+    int m{0};
+    int num_iterations{0};
+    double *buff_x = nullptr;
+    double *buff_y = nullptr;
+    double *buff_L = nullptr;
+    double *buff_a = nullptr;
+    double *buff_b = nullptr;
+    int *buff_count = nullptr;
+
 };
 
 // Utilità condivise

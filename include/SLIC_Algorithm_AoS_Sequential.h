@@ -17,15 +17,15 @@ class SLIC_Algorithm_AoS_Sequential: public SLIC_Algorithm_AoS {
             int cols_steps = image_lab.cols / S;
             int rows_steps = image_lab.rows / S;
             this->K = rows_steps * cols_steps;
-            this->K_max = this->K;
-            this->spxls = (SuperPixel_AoS *) malloc(this->K * sizeof(SuperPixel_AoS));
+            this->K_max = 2*this->K;
+            this->spxls = (SuperPixel_AoS *) malloc(this->K_max * sizeof(SuperPixel_AoS));
 
             // Linearization of the Image.
             for (int y = 0; y < image_lab.rows; y++) {
                 for (int x = 0; x < image_lab.cols; x++) {
                     idx= y * image_lab.cols + x;
                     cv::Vec3b pixel = image_lab.at<cv::Vec3b>(y, x);
-                    pxls[idx].distance = MAXFLOAT;
+                    pxls[idx].distance = DBL_MAX;
                     pxls[idx].label = -1;
                     pxls[idx].L = pixel[0];
                     pxls[idx].A = pixel[1];
@@ -39,6 +39,13 @@ class SLIC_Algorithm_AoS_Sequential: public SLIC_Algorithm_AoS {
             for (int i=0; i < this->K; i++) {
                 spxls[i].label = i;
             }
+
+            this->buff_x = (double *) malloc(this->K_max * sizeof(double));
+            this->buff_y = (double *) malloc(this->K_max * sizeof(double));
+            this->buff_L = (double *) malloc(this->K_max * sizeof(double));
+            this->buff_a = (double *) malloc(this->K_max * sizeof(double));
+            this->buff_b = (double *) malloc(this->K_max * sizeof(double));
+            this->buff_count = (int *) malloc(this->K_max * sizeof(int));
         }
         void Initialization() override;
         void iteration() override;

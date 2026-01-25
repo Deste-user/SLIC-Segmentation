@@ -1,6 +1,7 @@
 #ifndef SLIC_SEGMENTATION_ALGORITHM_SLIC_ALGORITHM_SOA_SEQUENTIAL_H
 #define SLIC_SEGMENTATION_ALGORITHM_SLIC_ALGORITHM_SOA_SEQUENTIAL_H
 #include "SLIC_Algorithm_SoA.h"
+#include <cfloat>
 
 class SLIC_Algorithm_SoA_Sequential: public SLIC_Algorithm_SoA {
 public:
@@ -14,21 +15,18 @@ public:
         int cols_steps = image_lab.cols / S;
         int rows_steps = image_lab.rows / S;
         this->K = rows_steps * cols_steps;
-        this->K_max = this->K;
+        this->K_max = 2*this->K;
         this->img= new Pixels_SoA();
         this->super_pixels= new SuperPixel_SoA();
 
-        img->L = (float*) malloc(N * sizeof(float));
-        img->A = (float*) malloc(N * sizeof(float));
-        img->B = (float*) malloc(N * sizeof(float));
+        img->L = (double*) malloc(N * sizeof(double));
+        img->A = (double*) malloc(N * sizeof(double));
+        img->B = (double*) malloc(N * sizeof(double));
         img->x = (int*) malloc(N * sizeof(int));
         img->y = (int*) malloc(N * sizeof(int));
-        img->distances = (float*) malloc(N * sizeof(float));
+        img->distances = (double*) malloc(N * sizeof(double));
         img->labels = (int*) malloc(N * sizeof(int));
 
-        // Otteniamo il puntatore raw ai dati dell'immagine per velocità massima
-        // Assumiamo che l'immagine sia continua in memoria (quasi sempre vero con imread)
-        unsigned char* raw_data = image_lab.data;
         int cols = image_lab.cols;
         int rows = image_lab.rows;
 
@@ -37,31 +35,37 @@ public:
 
                 int i = y * cols + x; // Indice lineare univoco
 
-                // Accesso diretto alla memoria OpenCV (molto più veloce di .at)
-                // L'immagine LAB ha 3 canali. Struttura: [L, A, B, L, A, B...]
-                int img_idx = i * 3;
+                cv::Vec3b pixel = image_lab.at<cv::Vec3b>(y, x);
 
-                img->L[i] = (float)raw_data[img_idx];     // Canale 0
-                img->A[i] = (float)raw_data[img_idx + 1]; // Canale 1
-                img->B[i] = (float)raw_data[img_idx + 2]; // Canale 2
+                img->L[i] = (double)pixel[0];
+                img->A[i] = (double)pixel[1];
+                img->B[i] = (double)pixel[2];
 
                 img->x[i] = x;
                 img->y[i] = y;
-                img->distances[i] = MAXFLOAT;
+                img->distances[i] = DBL_MAX;
                 img->labels[i] = -1;
             }
         }
-        this->super_pixels->label = (int*) malloc(this->K * sizeof(int));
-        this->super_pixels->centroid_x = (int*) malloc(this->K * sizeof(int));
-        this->super_pixels->centroid_y = (int*) malloc(this->K * sizeof(int));
-        this->super_pixels->val_L = (float*) malloc(this->K * sizeof(float));
-        this->super_pixels->val_a = (float*) malloc(this->K * sizeof(float));
-        this->super_pixels->val_b = (float*) malloc(this->K * sizeof(float));
+        this->super_pixels->label = (int*) malloc(this->K_max * sizeof(int));
+        this->super_pixels->centroid_x = (int*) malloc(this->K_max * sizeof(int));
+        this->super_pixels->centroid_y = (int*) malloc(this->K_max * sizeof(int));
+        this->super_pixels->val_L = (double*) malloc(this->K_max * sizeof(double));
+        this->super_pixels->val_a = (double*) malloc(this->K_max * sizeof(double));
+        this->super_pixels->val_b = (double*) malloc(this->K_max * sizeof(double));
 
         for (int l = 0; l < this->K; l++) {
             super_pixels->label[l] = l;
         }
+
+        this->buff_L = (double*) malloc(this->K_max * sizeof(double));
+        this->buff_a = (double*) malloc(this->K_max * sizeof(double));
+        this->buff_b = (double*) malloc(this->K_max * sizeof(double));
+        this->buff_x = (double*) malloc(this->K_max * sizeof(double));
+        this->buff_y = (double*) malloc(this->K_max * sizeof(double));
+        this->buff_count = (int*) malloc(this->K_max * sizeof(int));
     }
+
     void Initialization() override;
     void iteration() override;
     void update_centroids() override;

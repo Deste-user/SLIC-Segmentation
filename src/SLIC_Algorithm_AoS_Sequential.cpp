@@ -5,90 +5,21 @@
 #include <string>
 #include <random>
 #include "SLIC_common.h"
+#include "SLIC_Algorithm_AoS_Sequential.h"
 
-
-struct SuperPixel {
-    int label;
-    int centroid_x; // Colonna
-    int centroid_y; // Riga
-    float val_L;
-    float val_a;
-    float val_b;
-};
-struct Pixel {
-    int label;
-    int x;
-    int y;
-    float distance;
-    float L;
-    float A;
-    float B;
-};
-
-void Initialization_Structures(Pixel* pxls, cv::Mat image_lab, SuperPixel* spxs, int K) {
-    int idx = 0;
-
-    // Linearization of the Image.
-    for (int y = 0; y < image_lab.rows; y++) {
-        for (int x = 0; x < image_lab.cols; x++) {
-            idx= y * image_lab.cols + x;
-            cv::Vec3b pixel = image_lab.at<cv::Vec3b>(y, x);
-            pxls[idx].distance = MAXFLOAT;
-            pxls[idx].label = -1;
-            pxls[idx].L = pixel[0];
-            pxls[idx].A = pixel[1];
-            pxls[idx].B = pixel[2];
-            pxls[idx].x = x;
-            pxls[idx].y = y;
-        }
-    }
-
-    //To inizialize the labels of all super pixels
-    for (int i=0; i < K; i++) {
-        spxs[i].label = i;
-    }
-}
-
-float calculate_gradient(Pixel* pxls, int x, int y, int cols) {
-    float gradient = 0.0f;
-
-    int idx_right = y * cols + (x + 1);
-    int idx_left = y * cols + (x - 1);
-    int idx_down = (y + 1) * cols + x;
-    int idx_up = (y - 1) * cols + x;
-
-    // Differences L
-    float diff_x_L = pxls[idx_right].L - pxls[idx_left].L;
-    float diff_y_L = pxls[idx_down].L - pxls[idx_up].L;
-
-    // Differences A
-    float diff_x_A = pxls[idx_right].A - pxls[idx_left].A;
-    float diff_y_A = pxls[idx_down].A - pxls[idx_up].A;
-
-    // Differences B
-    float diff_x_B = pxls[idx_right].B - pxls[idx_left].B;
-    float diff_y_B = pxls[idx_down].B - pxls[idx_up].B;
-
-    gradient = diff_x_L * diff_x_L + diff_y_L * diff_y_L +
-               diff_x_A * diff_x_A + diff_y_A * diff_y_A +
-               diff_x_B * diff_x_B + diff_y_B * diff_y_B;
-
-    return gradient;
-}
-
-void Initialization(Pixel* pxls, SuperPixel* spxs ,int S, int rows, int cols, int K) {
+void SLIC_Algorithm_AoS_Sequential::Initialization() {
     int idx = 0;
     int i=0;
     // Regular grid
-    for (int y = S/2 ; y < rows; y += S) {
-        for (int x = S/2 ; x < cols; x += S) {
+    for (int y = S/2 ; y < this->image_lab.rows; y += S) {
+        for (int x = S/2 ; x < this->image_lab.cols; x += S) {
             if (i >= K) break;
-            idx= x + cols*y;
-            spxs[i].centroid_x = x;
-            spxs[i].centroid_y = y;
-            spxs[i].val_L = pxls[idx].L;
-            spxs[i].val_a = pxls[idx].A;
-            spxs[i].val_b = pxls[idx].B;
+            idx= x + this->image_lab.cols*y;
+            this->spxls[i].centroid_x = x;
+            this->spxls[i].centroid_y = y;
+            this->spxls[i].val_L = pxls[idx].L;
+            this->spxls[i].val_a = pxls[idx].A;
+            this->spxls[i].val_b = pxls[idx].B;
             i++;
         }
     }
@@ -96,14 +27,15 @@ void Initialization(Pixel* pxls, SuperPixel* spxs ,int S, int rows, int cols, in
     // To adjust centroids to the lowest gradient position in a 3x3 neighborhood
     for (int k=0; k<K; k++) {
         float min_gradient= FLT_MAX;
-        int best_x= spxs[k].centroid_x;
-        int best_y= spxs[k].centroid_y;
-        for (int dy=-1; dy< 1; dy++) {
-            for (int dx=-1; dx<1;dx++) {
-                int ny= spxs[k].centroid_y + S*dy;
-                int nx= spxs[k].centroid_x + S*dx;
-                if (nx > 0 || nx < cols -1 || ny > 0 || ny < rows -1) {
-                    float g= calculate_gradient(pxls, nx, ny, cols);
+        int best_x= this->spxls[k].centroid_x;
+        int best_y= this->spxls[k].centroid_y;
+        for (int dy=-1; dy<= 1; dy++) {
+            for (int dx=-1; dx<=1;dx++) {
+                int ny= this->spxls[k].centroid_y + dy;
+                int nx= this->spxls[k].centroid_x + dx;
+                if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1)
+                {
+                    float g= this->calculate_gradient(nx, ny);
                     if (g < min_gradient) {
                         min_gradient= g;
                         best_x= nx;
@@ -112,22 +44,30 @@ void Initialization(Pixel* pxls, SuperPixel* spxs ,int S, int rows, int cols, in
                 }
             }
         }
-        spxs[k].centroid_x= best_x;
-        spxs[k].centroid_y= best_y;
+        this->spxls[k].centroid_x= best_x;
+        this->spxls[k].centroid_y= best_y;
+        idx= best_y*this->image_lab.cols + best_x;
+        this->spxls[k].val_L= this->pxls[idx].L;
+        this->spxls[k].val_a= this->pxls[idx].A;
+        this->spxls[k].val_b= this->pxls[idx].B;
     }
 }
 
-void iteration(Pixel* pxls, SuperPixel* spxls, int S, int rows, int cols, int K, int m) {
+void SLIC_Algorithm_AoS_Sequential:: iteration() {
+    //int pixels_updated = 0;
+    for (int i = 0; i < this->N; i++) {
+        pxls[i].distance = DBL_MAX;
+    }
 
     for (int k=0; k<K;k++) {
         int x_min = std::max(spxls[k].centroid_x - S, 0);
-        int x_max = std::min(spxls[k].centroid_x + S, cols);
+        int x_max = std::min(spxls[k].centroid_x + S, this->image_lab.cols);
         int y_min = std::max(spxls[k].centroid_y - S, 0);
-        int y_max = std::min(spxls[k].centroid_y + S, rows);
+        int y_max = std::min(spxls[k].centroid_y + S, this->image_lab.rows);
 
         for (int y=y_min; y<y_max;y++) {
             for (int x=x_min;x<x_max;x++) {
-                int idx= x + cols*y;
+                int idx= x + this->image_lab.cols*y;
                 double d = distance_SLIC(
                     spxls[k].val_L, spxls[k].val_a, spxls[k].val_b,
                     spxls[k].centroid_x, spxls[k].centroid_y,
@@ -137,116 +77,55 @@ void iteration(Pixel* pxls, SuperPixel* spxls, int S, int rows, int cols, int K,
                 if (d < pxls[idx].distance) {
                     pxls[idx].distance= d;
                     pxls[idx].label= spxls[k].label;
+                    //pixels_updated++;
                 }
             }
         }
+        /* TO VISUALIZE THE ITERATIONS
+         *cv::Mat img = this->display_boundaries();
+        cv::imshow("img before iteration", img);
+        cv::waitKey(0);
+        */
     }
+    //std::cout << "[DEBUG] Pixels updated: " << pixels_updated << std::endl;
 }
 
-void update_centroids(Pixel* pxls, SuperPixel* spxls, int rows, int columns, int K) {
-    double* sum_x = (double*)calloc(K, sizeof(double));
-    double* sum_y = (double*)calloc(K, sizeof(double));
-    double* sum_L = (double*)calloc(K, sizeof(double));
-    double* sum_a = (double*)calloc(K, sizeof(double));
-    double* sum_b = (double*)calloc(K, sizeof(double));
-    int* count = (int*)calloc(K, sizeof(int));
+void SLIC_Algorithm_AoS_Sequential:: update_centroids() {
+
+    for (int k = 0; k < K; k++) {
+        this->buff_x[k] = 0.0;
+        this->buff_y[k] = 0.0;
+        this->buff_L[k] = 0.0;
+        this->buff_a[k] = 0.0;
+        this->buff_b[k] = 0.0;
+        this->buff_count[k] = 0;
+    }
+
 
     // Accumulate values for each superpixel
-    for (int idx = 0; idx < rows * columns; idx++) {
+    for (int idx = 0; idx < this->N; idx++) {
         int lbl = pxls[idx].label;
         if (lbl >= 0 && lbl < K) {
-            sum_L[lbl] += pxls[idx].L;
-            sum_a[lbl] += pxls[idx].A;
-            sum_b[lbl] += pxls[idx].B;
-            sum_x[lbl] += pxls[idx].x;
-            sum_y[lbl] += pxls[idx].y;
-            count[lbl]++;
+            this->buff_L[lbl] += pxls[idx].L;
+            this->buff_a[lbl] += pxls[idx].A;
+            this->buff_b[lbl] += pxls[idx].B;
+            this->buff_x[lbl] += pxls[idx].x;
+            this->buff_y[lbl] += pxls[idx].y;
+            this->buff_count[lbl]++;
         }
     }
 
     // Calculate new centroids
     for (int k = 0; k < K; k++) {
-        if (count[k] > 0) {
-            spxls[k].centroid_x = (int)(sum_x[k] / count[k]);
-            spxls[k].centroid_y = (int)(sum_y[k] / count[k]);
-            spxls[k].val_L = (float)(sum_L[k] / count[k]);
-            spxls[k].val_a = (float)(sum_a[k] / count[k]);
-            spxls[k].val_b = (float)(sum_b[k] / count[k]);
+        if (this->buff_count[k] > 0) {
+            spxls[k].centroid_x = (int)(this->buff_x[k] / this->buff_count[k]);
+            spxls[k].centroid_y = (int)(this->buff_y[k] / this->buff_count[k]);
+            spxls[k].val_L = (float)(this->buff_L[k] / this->buff_count[k]);
+            spxls[k].val_a = (float)(this->buff_a[k] / this->buff_count[k]);
+            spxls[k].val_b = (float)(this->buff_b[k] / this->buff_count[k]);
         }
     }
-
-    // Free memory
-    free(sum_x);
-    free(sum_y);
-    free(sum_L);
-    free(sum_a);
-    free(sum_b);
-    free(count);
 }
 
 
-
-void run(Pixel* pxls, SuperPixel* spxls,int rows, int cols,int K, int m, int iterations) {
-    int S = std::sqrt((rows * cols) / K);
-    Initialization(pxls, spxls, S, rows, cols, K);
-    for (int i = 0; i < iterations; i++) {
-        iteration(pxls, spxls, S, rows, cols, K, m);
-        update_centroids(pxls, spxls, rows, cols, K);
-    }
-}
-
-
-
-cv::Mat display_boundaries(Pixel* pxls, SuperPixel* spxs, int rows, int cols) {
-    cv::Mat lab_mat(rows, cols, CV_8UC3);
-    for (int y = 0; y < rows ; y++) {
-        for (int x = 0; x < cols ; x++) {
-            int idx = y * cols + x;
-            lab_mat.at<cv::Vec3b>(y, x)[0] = (uchar)spxs[pxls[idx].label].val_L;
-            lab_mat.at<cv::Vec3b>(y, x)[1] = (uchar)spxs[pxls[idx].label].val_a;
-            lab_mat.at<cv::Vec3b>(y, x)[2] = (uchar)spxs[pxls[idx].label].val_b;
-        }
-    }
-    cv::Mat output_mat;
-    cv::cvtColor(lab_mat, output_mat, cv::COLOR_Lab2BGR);
-
-    // Draw boundaries
-    for (int y = 0; y < rows - 1; y++) {
-        for (int x = 0; x < cols - 1; x++) {
-            int idx = y * cols + x;
-            int idx_right = y * cols + (x + 1);
-            int idx_down = (y + 1) * cols + x;
-
-            if (pxls[idx].label != pxls[idx_right].label || pxls[idx].label != pxls[idx_down].label) {
-                output_mat.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255); // Red boundary
-            }
-        }
-    }
-
-    return output_mat;
-}
-
-int main() {
-    std::string img_path = get_random_image_path(PATH_images);
-
-    cv::Mat image = cv::imread(img_path);
-    cv::imshow("Original Image", image);
-    if (image.empty()) return -1;
-    cv::Mat image_lab;
-    cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
-    int N = image_lab.cols * image_lab.rows;
-    Pixel* pxls= (Pixel*) malloc(image_lab.cols * image_lab.rows * sizeof(Pixel));
-    SuperPixel* spxs= (SuperPixel*) malloc(K * sizeof(SuperPixel));
-    Initialization_Structures(pxls, image_lab, spxs, K);
-    run(pxls, spxs, image_lab.rows, image_lab.cols, K, 10, 10);
-    cv::Mat output(image_lab.rows, image_lab.cols, CV_8UC3);
-    output= display_boundaries(pxls, spxs, image_lab.rows, image_lab.cols);
-    cv::imshow("SLIC Result AoS", output);
-    cv::waitKey(0);
-
-    free(pxls);
-    free(spxs);
-
-    return 0;
-}
 

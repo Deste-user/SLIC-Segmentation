@@ -1,0 +1,4 @@
+Resolution,Num_Pixels,Schedule,Chunk,AoS_Mean_ms,AoS_StdDev_ms,SoA_Mean_ms,SoA_StdDev_ms
+640x480,307200,sequential,0,10.6166,0,21.6639,0
+1280x720,921600,sequential,0,215.514,0,31.2567,0
+1920x1080,2073600,sequential,0,701.831,0,1008.75,0

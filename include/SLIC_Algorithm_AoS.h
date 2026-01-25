@@ -4,21 +4,21 @@
 
 struct SuperPixel_AoS {
     int label;
-    int centroid_x; // Colonna
-    int centroid_y; // Riga
-    float val_L;
-    float val_a;
-    float val_b;
+    int centroid_x;
+    int centroid_y;
+    double val_L;
+    double val_a;
+    double val_b;
 };
 
 struct Pixel_AoS {
     int label;
     int x;
     int y;
-    float distance;
-    float L;
-    float A;
-    float B;
+    double distance;
+    double L;
+    double A;
+    double B;
 };
 
 
@@ -38,6 +38,12 @@ class SLIC_Algorithm_AoS: public SLIC_Algorithm {
         ~SLIC_Algorithm_AoS() override{
             free(this->pxls);
             free(this->spxls);
+            free(this->buff_x);
+            free(this->buff_y);
+            free(this->buff_L);
+            free(this->buff_a);
+            free(this->buff_b);
+            free(this->buff_count);
         };
 };
 
