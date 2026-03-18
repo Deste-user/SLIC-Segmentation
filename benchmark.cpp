@@ -2,11 +2,15 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <algorithm>
+#include <cmath>
+#include <cctype>
 #include <numeric>
+#include <limits>
+#include <chrono>
 #include <omp.h>
 #include <opencv2/opencv.hpp>
 #include <filesystem>
-#include <cstdlib>
 #include "SLIC_Algorithm_AoS_Sequential.h"
 #include "SLIC_Algorithm_SoA_Sequential.h"
 #include "SLIC_Algorithm_AoS_Parallel.h"
@@ -73,16 +77,16 @@ Result measure_performance(SLIC_Algorithm* algo, int threads, omp_sched_t sched,
 
 
         double time=(end - start) * 1000.0;
-        std::cout << "Run " << i << ": " << time << " ms" << std::endl;
+        //std::cout << "Run " << i << ": " << time << " ms" << std::endl;
         times.push_back(time);
 
     }
 
     //  Calculate the statistics
     double sum = std::accumulate(times.begin(), times.end(), 0.0);
-    double mean = sum / times.size();
+    double mean = sum / static_cast<double>(times.size());
     double sq_sum = std::inner_product(times.begin(), times.end(), times.begin(), 0.0);
-    double std_dev = std::sqrt(sq_sum / times.size() - mean * mean);
+    double std_dev = std::sqrt(sq_sum / static_cast<double>(times.size()) - mean * mean);
 
     return {mean, std_dev};
 }
@@ -116,7 +120,7 @@ void optimize_algorithm(SLIC_Algorithm* algo, const BenchmarkConfig& cfg, std::o
     }
 }
 
-int variant_experiment_N_size(const BenchmarkConfig& cfg,const std::string path_img,int factor_size ,std::string csv_name) {
+int variant_experiment_N_size(const BenchmarkConfig& cfg, const std::string& path_img, int factor_size, std::string csv_name) {
     cv::Mat image = cv::imread(path_img);
     if (image.empty()) { std::cerr << "Err: Image not found!" << std::endl; return -1; }
     cv::Mat image_original = image.clone();
@@ -151,12 +155,12 @@ int variant_experiment_N_size(const BenchmarkConfig& cfg,const std::string path_
         optimize_algorithm(&seq_soa, cfg, csv);
     }
     {
-        SLIC_Algorithm_AoS_Parallel par_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
-        optimize_algorithm(&par_aos, cfg, csv);
+        SLIC_Algorithm_AoS_Parallel par_aos_notiled(image_lab, cfg.K, cfg.m, cfg.iterations);
+        optimize_algorithm(&par_aos_notiled, cfg, csv);
     }
     {
-        SLIC_Algorithm_SoA_Parallel par_soa(image_lab, cfg.K, cfg.m, cfg.iterations);
-        optimize_algorithm(&par_soa, cfg, csv);
+        SLIC_Algorithm_SoA_Parallel par_soa_notiled(image_lab, cfg.K, cfg.m, cfg.iterations);
+        optimize_algorithm(&par_soa_notiled, cfg, csv);
     }
     {
         SLIC_Algorithm_SoA_Parallel par_soa_tiled(image_lab, cfg.K, cfg.m, cfg.iterations);
@@ -173,8 +177,8 @@ int variant_experiment_N_size(const BenchmarkConfig& cfg,const std::string path_
     return 0;
 }
 
-void get_avg_time_num_thread(std::string alg,BenchmarkConfig cfg) {
-    std:: string imgs_path = PATH_images;
+void get_avg_time_num_thread(const std::string& alg, const BenchmarkConfig& cfg) {
+    std::string imgs_path = PATH_images;
     std::vector<double>mean_times;
     std::vector<std::string> valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"};
     std::cout << "STRUCTURE TYPE:" << alg << std::endl;
@@ -207,9 +211,10 @@ void get_avg_time_num_thread(std::string alg,BenchmarkConfig cfg) {
             SLIC_Algorithm* algo = nullptr;
             if (alg== "aos") {
                 algo = new SLIC_Algorithm_AoS_Parallel(image_lab, cfg.K, cfg.m, cfg.iterations);
-         }else {
+            }else {
                 algo = new SLIC_Algorithm_SoA_Parallel(image_lab, cfg.K, cfg.m, cfg.iterations);
             }
+
             omp_set_num_threads(t);
 
             omp_set_schedule(omp_sched_static, 0);
@@ -218,19 +223,20 @@ void get_avg_time_num_thread(std::string alg,BenchmarkConfig cfg) {
             Result res = measure_performance(algo, t, omp_sched_static, 0, cfg);
             times.push_back(res.mean);
             //std::cout << "Time (mean): " << res.mean << " ms" << std::endl;
+
             delete algo;
         }
         std::cout << std::endl;
         // Calculate average time for this number of threads
         double sum = std::accumulate(times.begin(), times.end(), 0.0);
-        float mean = sum / times.size();
+        double mean = sum / static_cast<double>(times.size());
         mean_times.push_back(mean);
     }
     std::cout << std::endl;
     // Print the best time and with the corresponding number of threads
-    float min_time= MAXFLOAT;
-    int best_threads=0;
-    for (int i=0; i<cfg.threads.size(); i++) {
+    double min_time = std::numeric_limits<double>::max();
+    int best_threads = 0;
+    for (int i = 0; i < cfg.threads.size(); i++) {
         std::cout << "Threads: " << cfg.threads[i] << " -> Avg Time: " << mean_times[i] << " ms" << std::endl;
         if (mean_times[i] < min_time) {
             min_time = mean_times[i];
@@ -247,6 +253,10 @@ void get_avg_time_num_thread(std::string alg,BenchmarkConfig cfg) {
     std::string csv_name = "benchmark_avg_time_threads_";
     csv_name = "../all_benchmark_results/num_thread_experiments/" + csv_name + alg + ".csv";
     std::ofstream csv(csv_name);
+    if (!csv.is_open()) {
+        std::cerr << "Errore: Impossibile aprire il file " << csv_name << std::endl;
+        return;
+    }
     csv << "Threads, Avg_Time_ms\n";
     for (int i=0; i<cfg.threads.size(); i++) {
         csv << cfg.threads[i] << "," << mean_times[i] << "\n";
@@ -255,7 +265,7 @@ void get_avg_time_num_thread(std::string alg,BenchmarkConfig cfg) {
 
 //This function is to verify the complexity of the SLIC algorithm
 // Doesn't matter the layout of the data structure
-void get_time_for_complexity(int num_factor, BenchmarkConfig cfg, int num_thread) {
+void get_time_for_complexity(int num_factor, const BenchmarkConfig& cfg, int num_thread) {
     std::string img_path = get_random_image_path(PATH_images);
     SLIC_Algorithm *algo = nullptr;
     cv::Mat resize_image;
@@ -286,7 +296,7 @@ void get_time_for_complexity(int num_factor, BenchmarkConfig cfg, int num_thread
     }
 
 
-    csv << "Image_Size_Factor, Mean_Time_ms\n";
+    csv << "Image_Size_Factor, Mean_Time_ms, Parallel\n";
     csv.flush();
     for (int i=1; i<= num_factor; i++) {
         cv::resize(image_lab, resize_image, cv::Size(), i, i);
@@ -296,7 +306,18 @@ void get_time_for_complexity(int num_factor, BenchmarkConfig cfg, int num_thread
         omp_set_schedule(omp_sched_static, 0);
         Result res = measure_performance(algo, num_thread, omp_sched_static, 0, cfg);
         std::cout << "Image Size Factor: " << i << " -> Time (mean): " << res.mean << " ms" << std::endl;
-        csv << i << "," << res.mean << "\n";
+        csv << i << "," << res.mean << "," << 1 <<"\n";
+        csv.flush();
+        delete algo;
+    }
+    std::cout<< "\nNow testing the sequential version...\n" << std::endl;
+    for (int i=1; i<= num_factor; i++) {
+        cv::resize(image_lab, resize_image, cv::Size(), i, i);
+        std::cout<< "Testing with image size factor: " << i << " (" << resize_image.cols << "x" << resize_image.rows << ")" << std::endl;
+        algo= new SLIC_Algorithm_SoA_Sequential(resize_image, cfg.K, cfg.m, cfg.iterations);
+        Result res = measure_performance(algo, num_thread, omp_sched_static, 0, cfg);
+        std::cout << "Image Size Factor: " << i << " -> Time (mean): " << res.mean << " ms" << std::endl;
+        csv << i << "," << res.mean << "," << 0 <<"\n";
         csv.flush();
         delete algo;
     }
@@ -338,7 +359,7 @@ std::vector<std::string> get_first_N_images(const std::string& directory_path, i
     return image_paths;
 }
 
-void run_averaged_benchmark(BenchmarkConfig cfg, int num_images_to_test, bool tile, bool parallel,bool reduction=true) {
+void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, bool tile, bool parallel, bool reduction=true) {
     std::vector<std::string> images = get_first_N_images(PATH_images, num_images_to_test);
 
     if (images.empty()) {
@@ -374,6 +395,10 @@ void run_averaged_benchmark(BenchmarkConfig cfg, int num_images_to_test, bool ti
     filename += ".csv";
 
     std::ofstream csv(filename);
+    if (!csv.is_open()) {
+        std::cerr << "Errore: Impossibile aprire il file " << filename << std::endl;
+        return;
+    }
     csv << "Resolution,Num_Pixels,Schedule,Chunk,AoS_Mean_ms,AoS_StdDev_ms,SoA_Mean_ms,SoA_StdDev_ms\n";
     int fixed_threads = 8;
 
@@ -422,13 +447,13 @@ void run_averaged_benchmark(BenchmarkConfig cfg, int num_images_to_test, bool ti
 
                     } else {
                         // --- Sequential ---
-                        std::cout<< "Sequential AoS \n"<< std::endl;
+                        //std::cout<< "Sequential AoS \n"<< std::endl;
                         SLIC_Algorithm* aos_seq = new SLIC_Algorithm_AoS_Sequential(image_lab, cfg.K, cfg.m, cfg.iterations);
                         if (tile) aos_seq->set_tiling(true);
                         Result res_aos = measure_performance(aos_seq, 1, omp_sched_static, 0, cfg);
                         time_aos = res_aos.mean;
                         delete aos_seq;
-                        std::cout<< "Sequential SoA \n"<< std::endl;
+                        //std::cout<< "Sequential SoA \n"<< std::endl;
                         SLIC_Algorithm* soa_seq = new SLIC_Algorithm_SoA_Sequential(image_lab, cfg.K, cfg.m, cfg.iterations);
                         if (tile) soa_seq->set_tiling(true);
                         Result res_soa = measure_performance(soa_seq, 1, omp_sched_static, 0, cfg);
@@ -444,8 +469,6 @@ void run_averaged_benchmark(BenchmarkConfig cfg, int num_images_to_test, bool ti
                     processed_count++;
                     std::cout << "#" << std::flush;
                 }
-
-
 
 
                 if (processed_count > 0) {
@@ -482,31 +505,105 @@ void run_averaged_benchmark(BenchmarkConfig cfg, int num_images_to_test, bool ti
     std::cout << "\nBenchmark completato! File salvato: " << filename << std::endl;
 }
 
-void overhead_EnforceConnectivity(BenchmarkConfig cfg, SLIC_Algorithm* algo) {
+void profile_AllPhases(const BenchmarkConfig& cfg, SLIC_Algorithm* algo) {
 
-    std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
-    algo->Initialization();
-    for (int i = 0; i < 10; i++) {
-        algo->iteration();
-        algo->update_centroids();
+    std::string filepath = "../all_benchmark_results/amdahl_law_experiment";
+
+    if (os::exists(filepath) == false) {
+        os::create_directory(filepath);
     }
-    std::chrono::high_resolution_clock::time_point start_enhance = std::chrono::high_resolution_clock::now();
+
+    filepath += "/amdahl_law_experiment.csv";
+    std::ofstream csv(filepath);
+    if (!csv.is_open()) {
+        std::cerr << "Errore: Impossibile aprire il file " << filepath << std::endl;
+        return;
+    }
+
+    csv << "Initialization_ms, Assignment_ms, Update_ms, EnforceConnectivity_ms, FinalUpdate_ms, Total_ms\n";
+
+
+
+    // --- WARM UP ---
+    for (int i = 0; i < cfg.warm_up_runs; i++) {
+        algo->Initialization();
+        for (int j = 0; j < 10; j++) {
+            algo->iteration();
+            algo->update_centroids();
+        }
+        int K = algo->EnforceConnectivity();
+        algo->set_K(K);
+        algo->update_centroids();
+        algo->clear();
+        algo->set_K(cfg.K);
+    }
+
+    // --- PROFILING ---
+    using std::chrono::high_resolution_clock;
+    using std::chrono::duration;
+
+    auto start_total = high_resolution_clock::now();
+
+    // 1. Initialization
+    auto start_init = high_resolution_clock::now();
+    algo->Initialization();
+    auto end_init = high_resolution_clock::now();
+    double time_init = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_init - start_init).count();
+
+    // 2. Iteration (Assignment) & Update Loop
+    double time_assign = 0.0;
+    double time_update = 0.0;
+
+    for (int i = 0; i < 10; i++) {
+        // Assignment phase
+        auto start_assign = high_resolution_clock::now();
+        algo->iteration();
+        auto end_assign = high_resolution_clock::now();
+        time_assign += std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_assign - start_assign).count(); // Accumulo!
+
+        // Update phase
+        auto start_update = high_resolution_clock::now();
+        algo->update_centroids();
+        auto end_update = high_resolution_clock::now();
+        time_update += std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_update - start_update).count(); // Accumulo!
+    }
+
+    // 3. Enforce Connectivity
+    auto start_enhance = high_resolution_clock::now();
     int K = algo->EnforceConnectivity();
-    std::chrono::high_resolution_clock::time_point end_enhance = std::chrono::high_resolution_clock::now();
+    auto end_enhance = high_resolution_clock::now();
+    double time_enhance = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_enhance - start_enhance).count();
+
     algo->set_K(K);
+    auto start_final = high_resolution_clock::now();
     algo->update_centroids();
-    std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+    auto end_final = high_resolution_clock::now();
+    double time_final_update = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_final - start_final).count();
 
-    double total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    double enhance_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_enhance - start_enhance).count();
+    auto end_total = high_resolution_clock::now();
+    double time_total = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_total - start_total).count();
 
-    std::cout << "EnforceConnectivity Overhead: " << enhance_time <<"ms" <<std::endl;
-    std::cout << "Total Time AoS Sequential: " << total_time << " ms" << std::endl;
-    std::cout << "Percentage Overhead AoS Sequential: " << (enhance_time / total_time) * 100.0 << " %" << std::endl;
+    std::cout << "\n=== SLIC Execution Time Breakdown ===" << std::endl;
+    std::cout << "1. Initialization:      " << time_init << " ms (" << (time_init / time_total) * 100.0 << " %)" << std::endl;
+    std::cout << "2. Assignment (10x):    " << time_assign << " ms (" << (time_assign / time_total) * 100.0 << " %)" << std::endl;
+    std::cout << "3. Update (10x):        " << time_update << " ms (" << (time_update / time_total) * 100.0 << " %)" << std::endl;
+    std::cout << "4. Enforce Connect.:    " << time_enhance << " ms (" << (time_enhance / time_total) * 100.0 << " %)" << std::endl;
+    std::cout << "5. Final Update:        " << time_final_update << " ms (" << (time_final_update / time_total) * 100.0 << " %)" << std::endl;
+    std::cout << "-------------------------------------" << std::endl;
+    std::cout << "TOTAL TIME:             " << time_total << " ms" << std::endl;
+    std::cout << "=====================================\n" << std::endl;
+
+    csv << time_init <<"," << time_assign << "," << time_update << "," << time_enhance << "," <<time_final_update <<
+        "," << time_total << "\n";
+    csv.close();
+
+    // Reset for next runs
+    algo->set_K(cfg.K);
     algo->clear();
 }
 
 void display_evolution(SLIC_Algorithm* algo) {
+    int old_k= algo->k();
     algo->Initialization();
     for (int i = 0; i < 10; i++) {
         algo->iteration();
@@ -517,6 +614,7 @@ void display_evolution(SLIC_Algorithm* algo) {
     algo->set_K(K);
     algo->update_centroids();
     cv::Mat img1 = algo->display_boundaries();
+    algo->set_K(old_k);
     algo->clear();
 }
 
@@ -524,13 +622,12 @@ void display_evolution(SLIC_Algorithm* algo) {
 int main() {
 
     BenchmarkConfig cfg;
-
     if (os::exists("../all_benchmark_results")==false) {
         os::create_directory("../all_benchmark_results");
     }
-    //get_avg_time_num_thread("aos",cfg);
-    //get_avg_time_num_thread("soa",cfg);
-    //get_time_for_complexity(6, cfg, 8);
+    /*get_avg_time_num_thread("aos",cfg);
+    get_avg_time_num_thread("soa",cfg);
+    get_time_for_complexity(6, cfg, 8);
 
     // After this experiment we can see that the best number of threads is 8 for both the data layouts.
     std::string img_path = get_random_image_path(PATH_images);
@@ -543,31 +640,37 @@ int main() {
     }
 
     //Sequential
-    //run_averaged_benchmark(cfg, 0,false,false);
+    std::cout << "\n--- Sequential Benchmark ---\n" << std::endl;
+    run_averaged_benchmark(cfg, 1,false,false);
+
+    std::cout << "\n--- Parallel Benchmark without Tiling and with Reduction ---\n" << std::endl;
     //Parallel without Tiling and with reduction
-    //run_averaged_benchmark(cfg, 0,false,true);
+    run_averaged_benchmark(cfg, 1,false,true);
+
+    std::cout << "\n--- Parallel Benchmark without Tiling and with Atomic --- \n" << std::endl;
     //Parallel without tiling and with atomic
-    //run_averaged_benchmark(cfg,0,false,true,false);
+    run_averaged_benchmark(cfg,1,false,true,false);
 
+    std::cout << "\n--- Parallel Benchmark with Tiling and with Reduction ---\n" << std::endl;
     //Parallel with Tiling and with reduction
-    //run_averaged_benchmark(cfg, 1,true,true);
+    run_averaged_benchmark(cfg, 1,true,true);
 
+    std::cout << "\n--- Parallel Benchmark with Tiling and with Atomic --- \n" << std::endl;
+    //Parallel with Tiling and with atomic
+    run_averaged_benchmark(cfg,1,true,true,false);
+    */
     //Amhdal Law to see if we can parallelize the Enforce Connectivity function
-
     cv::Mat raw_image = cv::imread(PATH_example);
     cv::Mat image, image_lab;
     cv::resize(raw_image, image, cv::Size(1920, 1080));
     cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
     SLIC_Algorithm_AoS_Parallel seq_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
-    SLIC_Algorithm_SoA_Parallel seq_soa(image_lab, cfg.K, cfg.m, cfg.iterations);
-    //overhead_EnforceConnectivity(cfg, &seq_aos);
-    //overhead_EnforceConnectivity(cfg,&seq_soa);
+    SLIC_Algorithm_SoA_Parallel par_soa(image_lab, cfg.K, cfg.m, cfg.iterations);
+    profile_AllPhases(cfg, &seq_aos);
 
 
-    // To see the result!
     display_evolution( &seq_aos);
-    display_evolution(&seq_soa);
-
+    display_evolution(&par_soa);
 
 
     return 0;

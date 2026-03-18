@@ -3,10 +3,11 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 
-#define TILE_SIZE 64
+#define TILE_SIZE 32
 #define PATH_images "../archive/images/val/"
 #define PATH_images_test "../archive/images/test/"
 #define PATH_example "../archive/images/test/2018.jpg"
+#include <opencv2/opencv.hpp>
 
 enum DataLayout {
     AoS,
@@ -33,7 +34,10 @@ public:
             this->iteration();
             this->update_centroids();
         }
-        this->K = EnforceConnectivity();
+        int new_K = EnforceConnectivity();
+        if (new_K < 1) new_K = 1;
+        if (new_K > K_max) new_K = K_max;
+        this->K = new_K;
         this->update_centroids();
     };
     void set_tiling(const bool val) {
@@ -73,6 +77,11 @@ public:
     }
     void set_K(int new_K) {
         this->K = new_K;
+        double N = (double)this->image_lab.rows * this->image_lab.cols;
+        this->S = (int)sqrt(N / new_K);
+        int cols_steps = image_lab.cols / S;
+        int rows_steps = image_lab.rows / S;
+        this->K = rows_steps * cols_steps;
     }
 
     bool use_tiling{false};

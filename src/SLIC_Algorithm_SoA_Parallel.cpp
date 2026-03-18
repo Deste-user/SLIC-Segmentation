@@ -69,72 +69,64 @@ void SLIC_Algorithm_SoA_Parallel::Initialization() {
 
 // Use the pixel centric version - each pixel checks all superpixels in its 2Sx2S regio
 void SLIC_Algorithm_SoA_Parallel::iteration() {
-    // I define these variables here to avoid recalculating them in the loops
     const int rows = this->image_lab.rows;
     const int cols = this->image_lab.cols;
     const int grid_w = cols/S;
-#pragma omp parallel
+    const int grid_h = rows/S;  // ← AGGIUNGI QUI
+
+#pragma omp parallel default(none) shared(rows, cols, grid_w, grid_h)
     {
         if(!this->use_tiling) {
             #pragma omp for schedule(runtime)
-                for (int y = 0; y < rows; y++) {
-                    int grid_y = y / S;
-                    for (int x=0; x < cols; x++){
-                        int idx = x + cols * y;
-                        int grid_x = x / S;
+            for (int y = 0; y < rows; y++) {
+                int grid_y = y / S;
+                for (int x=0; x < cols; x++){
+                    int idx = x + cols * y;
+                    int grid_x = x / S;
 
-                        // We can save here in local variables to reduce memory accesses
-                        float val_L = img->L[idx];
-                        float val_a = img->A[idx];
-                        float val_b = img->B[idx];
-                        int pos_x = img->x[idx];
-                        int pos_y = img->y[idx];
-                        double min_distance = DBL_MAX;
-                        int best_k = img->labels[idx];
-                        bool changed = false;
+                    float val_L = img->L[idx];
+                    float val_a = img->A[idx];
+                    float val_b = img->B[idx];
+                    int pos_x = img->x[idx];
+                    int pos_y = img->y[idx];
+                    double min_distance = DBL_MAX;
+                    int best_k = -1;
+                    bool changed = false;
 
-
-                        for (int ny = -1; ny <= 1; ny++) {
-                            //I can save some computations out of the inner loop
-                            int ky = grid_y + ny;
-                            int k_row_offset = ky * grid_w;
-                            for (int nx = -1; nx <= 1; nx++) {
-                                int kx = grid_x + nx;
-                                int k = k_row_offset + kx;
-                                if (k >= 0 && k < K) {
-                                    if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
-                                        abs(super_pixels->centroid_y[k] - y) < 2 * S) {
-                                        double d = distance_SLIC(super_pixels->val_L[k], super_pixels->val_a[k],
-                                                                 super_pixels->val_b[k], super_pixels->centroid_x[k],
-                                                                 super_pixels->centroid_y[k],
-                                                                 val_L, val_a,val_b,pos_x,pos_y, S,
-                                                                 m);
-
-                                        if (d < min_distance) {
-                                            min_distance = d;
-                                            best_k = k;
-                                            changed = true;
-                                        }
-                                    }
+                    for (int ny = -1; ny <= 1; ny++) {
+                        int ky = grid_y + ny;
+                        if (ky < 0 || ky >= grid_h) continue;
+                        int k_row_offset = ky * grid_w;
+                        for (int nx = -1; nx <= 1; nx++) {
+                            int kx = grid_x + nx;
+                            if (kx < 0 || kx >= grid_w) continue;
+                            int k = k_row_offset + kx;
+                            if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
+                                abs(super_pixels->centroid_y[k] - y) < 2 * S) {
+                                double d = distance_SLIC(super_pixels->val_L[k], super_pixels->val_a[k],
+                                                         super_pixels->val_b[k], super_pixels->centroid_x[k],
+                                                         super_pixels->centroid_y[k],
+                                                         val_L, val_a, val_b, pos_x, pos_y, S, m);
+                                if (d < min_distance) {
+                                    min_distance = d;
+                                    best_k = k;
+                                    changed = true;
                                 }
                             }
                         }
-                        if (changed) {
-                            img->distances[idx] =(float) min_distance;
-                            img->labels[idx] = best_k;
-                        }
+                    }
+                    if (changed) {
+                        img->distances[idx] = (float) min_distance;
+                        img->labels[idx] = best_k;
                     }
                 }
+            }
         }else{
-            #pragma omp for collapse(2) schedule(runtime)
-            // When I acccess to a location, I could load a block of data into the cache.
-            // Therefore, I access contiguous blocks of data to make the best use of the cache.
-            // I suppose that the TILE_SIZE is 64.
+            #pragma omp for collapse(2) schedule(static)
             for (int by = 0; by < rows; by += TILE_SIZE) {
                 for (int bx = 0; bx < cols; bx += TILE_SIZE) {
                     int y_end = std::min(by + TILE_SIZE, this->image_lab.rows);
                     int x_end = std::min(bx + TILE_SIZE, this->image_lab.cols);
-                    // Sfrutto la cache.
                     for (int y = by; y < y_end; y++) {
                         int grid_y = y / S;
                         for (int x = bx; x < x_end; x++) {
@@ -144,33 +136,30 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
                             float val_L = img->L[idx];
                             float val_a = img->A[idx];
                             float val_b = img->B[idx];
-                            float pos_x = img->x[idx];
-                            float pos_y = img->y[idx];
-
-                            double min_distance = img->distances[idx];
-                            int best_k = img->labels[idx];
+                            int pos_x = img->x[idx];
+                            int pos_y = img->y[idx];
+                            double min_distance = DBL_MAX;
+                            int best_k = -1;
                             bool changed = false;
 
                             for (int ny = -1; ny <= 1; ny++) {
                                 int ky = grid_y + ny;
+                                if (ky < 0 || ky >= grid_h) continue;
                                 int k_row_offset = ky * grid_w;
                                 for (int nx = -1; nx <= 1; nx++) {
                                     int kx = grid_x + nx;
-
+                                    if (kx < 0 || kx >= grid_w) continue;
                                     int k = k_row_offset + kx;
-                                    if (k >= 0 && k < K) {
-                                        if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
-                                            abs(super_pixels->centroid_y[k] - y) < 2 * S) {
-                                            double d = distance_SLIC(super_pixels->val_L[k], super_pixels->val_a[k],
-                                                                     super_pixels->val_b[k], super_pixels->centroid_x[k],
-                                                                     super_pixels->centroid_y[k],
-                                                                     val_L,val_a,val_b,pos_x,pos_y, S, m);
-
-                                            if (d < min_distance) {
-                                                min_distance = d;
-                                                best_k = k;
-                                                changed = true;
-                                            }
+                                    if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
+                                        abs(super_pixels->centroid_y[k] - y) < 2 * S) {
+                                        double d = distance_SLIC(super_pixels->val_L[k], super_pixels->val_a[k],
+                                                                 super_pixels->val_b[k], super_pixels->centroid_x[k],
+                                                                 super_pixels->centroid_y[k],
+                                                                 val_L, val_a, val_b, pos_x, pos_y, S, m);
+                                        if (d < min_distance) {
+                                            min_distance = d;
+                                            best_k = k;
+                                            changed = true;
                                         }
                                     }
                                 }
@@ -189,6 +178,8 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
 
 void SLIC_Algorithm_SoA_Parallel::update_centroids() {
     int max_threads = omp_get_max_threads();
+    // Parallelizzare l'inizializzazione per first-touch NUMA-friendly
+#pragma omp parallel for schedule(static)
     for (int k = 0; k < K_max; k++) {
         buff_x[k] = 0.0;
         buff_y[k] = 0.0;
@@ -198,27 +189,60 @@ void SLIC_Algorithm_SoA_Parallel::update_centroids() {
         buff_count[k] = 0;
     }
 
-if (this->reduction_parallel) {
+    if (this->reduction_parallel) {
 #pragma omp parallel
-    {
+        {
 #pragma omp for schedule(runtime) \
 reduction(+: buff_x[:K_max], buff_y[:K_max], buff_L[:K_max], \
 buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])     // si usa nowait poichè non serve aspettare gli altri.
-        for (int idx = 0; idx < N; idx++) {
-            int lbl = img->labels[idx];
-            if (lbl >= 0 && lbl < K_max) {
-                buff_x[lbl] += img->x[idx];
-                buff_y[lbl] += img->y[idx];
-                buff_L[lbl] += img->L[idx];
-                buff_a[lbl] += img->A[idx];
-                buff_b[lbl] += img->B[idx];
-                buff_count[lbl]++;
+            for (int idx = 0; idx < N; idx++) {
+                int lbl = img->labels[idx];
+                if (lbl >= 0 && lbl < K_max) {
+                    buff_x[lbl] += img->x[idx];
+                    buff_y[lbl] += img->y[idx];
+                    buff_L[lbl] += img->L[idx];
+                    buff_a[lbl] += img->A[idx];
+                    buff_b[lbl] += img->B[idx];
+                    buff_count[lbl]++;
+                }
+            }
+            // Implicit Barrier has sum all the arrays.
+
+            // Now each thread can update a portion of the centroids.
+#pragma omp for schedule(runtime)
+            for (int k = 0; k < K; k++) {
+                if (buff_count[k] > 0) {
+                    super_pixels->centroid_x[k] = (int) (buff_x[k] / buff_count[k]);
+                    super_pixels->centroid_y[k] = (int) (buff_y[k] / buff_count[k]);
+                    super_pixels->val_L[k] = (float) (buff_L[k] / buff_count[k]);
+                    super_pixels->val_a[k] = (float) (buff_a[k] / buff_count[k]);
+                    super_pixels->val_b[k] = (float) (buff_b[k] / buff_count[k]);
+                }
             }
         }
-        // Implicit Barrier has sum all the arrays.
+    }else {
 
-        // Now each thread can update a portion of the centroids.
-#pragma omp for schedule(runtime)
+#pragma omp parallel for schedule(runtime)
+        for (int i = 0; i < this-> N; i++) {
+            int lbl= img->labels[i];
+            if (lbl >=0 && lbl < K_max) {
+#pragma omp atomic
+                buff_L[lbl] += img->L[i];
+#pragma omp atomic
+                buff_a[lbl] += img->A[i];
+#pragma omp atomic
+                buff_b[lbl] += img->B[i];
+#pragma omp atomic
+                buff_x[lbl] += img->x[i];
+#pragma omp atomic
+                buff_y[lbl] += img->y[i];
+#pragma omp atomic
+                buff_count[lbl]++;
+            }
+
+        }
+
+#pragma omp parallel for schedule(runtime)
         for (int k = 0; k < K; k++) {
             if (buff_count[k] > 0) {
                 super_pixels->centroid_x[k] = (int) (buff_x[k] / buff_count[k]);
@@ -228,41 +252,8 @@ buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])     // si usa nowait poichè
                 super_pixels->val_b[k] = (float) (buff_b[k] / buff_count[k]);
             }
         }
-    }
-}else {
 
-#pragma omp parallel for schedule(runtime)
-    for (int i = 0; i < this-> N; i++) {
-        int lbl= img->labels[i];
-        if (lbl >=0 && lbl < K_max) {
-#pragma omp atomic
-            buff_L[lbl] += img->L[i];
-#pragma omp atomic
-            buff_a[lbl] += img->A[i];
-#pragma omp atomic
-            buff_b[lbl] += img->B[i];
-#pragma omp atomic
-            buff_x[lbl] += img->x[i];
-#pragma omp atomic
-            buff_y[lbl] += img->y[i];
-#pragma omp atomic
-            buff_count[lbl]++;
-        }
 
     }
-
-#pragma omp parallel for schedule(runtime)
-    for (int k = 0; k < K; k++) {
-        if (buff_count[k] > 0) {
-            super_pixels->centroid_x[k] = (int) (buff_x[k] / buff_count[k]);
-            super_pixels->centroid_y[k] = (int) (buff_y[k] / buff_count[k]);
-            super_pixels->val_L[k] = (float) (buff_L[k] / buff_count[k]);
-            super_pixels->val_a[k] = (float) (buff_a[k] / buff_count[k]);
-            super_pixels->val_b[k] = (float) (buff_b[k] / buff_count[k]);
-        }
-    }
-
-
 }
 
-}

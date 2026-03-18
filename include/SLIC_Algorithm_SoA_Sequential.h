@@ -19,13 +19,13 @@ public:
         this->img= new Pixels_SoA();
         this->super_pixels= new SuperPixel_SoA();
 
-        img->L = (double*) malloc(N * sizeof(double));
-        img->A = (double*) malloc(N * sizeof(double));
-        img->B = (double*) malloc(N * sizeof(double));
-        img->x = (int*) malloc(N * sizeof(int));
-        img->y = (int*) malloc(N * sizeof(int));
-        img->distances = (double*) malloc(N * sizeof(double));
-        img->labels = (int*) malloc(N * sizeof(int));
+        img->L = new double[N];
+        img->A = new double[N];
+        img->B = new double[N];
+        img->x = new int[N];
+        img->y = new int[N];
+        img->distances = new double[N];
+        img->labels = new int[N];
 
         int cols = image_lab.cols;
         int rows = image_lab.rows;
@@ -47,12 +47,12 @@ public:
                 img->labels[i] = -1;
             }
         }
-        this->super_pixels->label = (int*) malloc(this->K_max * sizeof(int));
-        this->super_pixels->centroid_x = (int*) malloc(this->K_max * sizeof(int));
-        this->super_pixels->centroid_y = (int*) malloc(this->K_max * sizeof(int));
-        this->super_pixels->val_L = (double*) malloc(this->K_max * sizeof(double));
-        this->super_pixels->val_a = (double*) malloc(this->K_max * sizeof(double));
-        this->super_pixels->val_b = (double*) malloc(this->K_max * sizeof(double));
+        this->super_pixels->label = new int[this->K_max];
+        this->super_pixels->centroid_x = new int[this->K_max];
+        this->super_pixels->centroid_y = new int[this->K_max];
+        this->super_pixels->val_L = new double[this->K_max];
+        this->super_pixels->val_a = new double[this->K_max];
+        this->super_pixels->val_b = new double[this->K_max];
 
         for (int l = 0; l < this->K; l++) {
             super_pixels->label[l] = l;

@@ -134,7 +134,7 @@ int SLIC_Algorithm_AoS::EnforceConnectivity(){
 float SLIC_Algorithm_AoS::calculate_gradient(int x, int y) {
     float gradient = 0.0f;
 
-    if (x <= 0 || x >= this->image_lab.cols - 1 || y <= 0 || y >= this->image_lab.rows) return INT_MAX;
+    if (x <= 0 || x >= this->image_lab.cols - 1 || y <= 0 || y >= this->image_lab.rows - 1) return FLT_MAX;
     int idx_right = y * this->image_lab.cols + (x + 1);
     int idx_left = y * this->image_lab.cols + (x - 1);
     int idx_down = (y + 1) * this->image_lab.cols + x;

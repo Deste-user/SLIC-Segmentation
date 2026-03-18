@@ -1,4 +1,4 @@
-#include "slic_common.h"
+#include "SLIC_common.h"
 #include <filesystem>
 #include <vector>
 #include <random>
@@ -26,7 +26,7 @@ std::string get_random_image_path(const std::string& folder_path) {
     // Modern random generator (better than rand())
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> distrib(0, valid_images.size() - 1);
+    std::uniform_int_distribution<> distrib(0, static_cast<int>(valid_images.size()) - 1);
 
     int random_index = distrib(gen);
     return valid_images[random_index];
@@ -57,7 +57,7 @@ double distance_SLIC(float cL, float cA, float cB, int cx, int cy,
     double d_spatial = (cx - px) * (cx - px) +
         (cy - py) * (cy - py);
 
-    float weight = (float)m / S;
+    float weight = static_cast<float>(m) / static_cast<float>(S);
 
     return std::sqrt(d_color + d_spatial * weight * weight);
 }

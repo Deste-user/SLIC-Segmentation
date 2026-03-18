@@ -1,6 +1,7 @@
 #ifndef SLIC_SEGMENTATION_ALGORITHM_SLIC_ALGORITHM_SOA_H
 #define SLIC_SEGMENTATION_ALGORITHM_SLIC_ALGORITHM_SOA_H
 #include "SLIC_common.h"
+#include <opencv2/opencv.hpp>
 
 struct Pixels_SoA {
     double *L = nullptr;

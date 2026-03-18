@@ -1,24 +1,25 @@
 #ifndef SLIC_SEGMENTATION_ALGORITHM_SLIC_ALGORITHM_AOS_H
 #define SLIC_SEGMENTATION_ALGORITHM_SLIC_ALGORITHM_AOS_H
 #include "SLIC_common.h"
+#include <opencv2/opencv.hpp>
 
 struct SuperPixel_AoS {
     int label;
     int centroid_x;
     int centroid_y;
-    double val_L;
-    double val_a;
-    double val_b;
+    float val_L;
+    float val_a;
+    float val_b;
 };
 
 struct Pixel_AoS {
     int label;
     int x;
     int y;
-    double distance;
-    double L;
-    double A;
-    double B;
+    float distance;
+    float L;
+    float A;
+    float B;
 };
 
 
