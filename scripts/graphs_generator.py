@@ -4,7 +4,7 @@ import numpy as np
 import seaborn as sns
 import os
 
-from fontTools.misc.cython import returns
+
 
 dir_generated = "generated_graphs"
 
@@ -333,12 +333,15 @@ if __name__ == "__main__":
     df_thread_aos = pd.read_csv("all_benchmark_results/num_thread_experiments/benchmark_avg_time_threads_aos.csv")
     df_thread_soa = pd.read_csv("all_benchmark_results/num_thread_experiments/benchmark_avg_time_threads_soa.csv")
 
-    df_parallel_notiled_reduction = pd.read_csv("all_benchmark_results/benchmark_experiments/avg_bench_parallel_notiled_reduction.csv")
-    df_parallel_notiled_atomics = pd.read_csv("all_benchmark_results/benchmark_experiments/avg_bench_parallel_notiled_atomic.csv")
+    df_parallel_notiled_reduction = pd.read_csv(
+        "all_benchmark_results/benchmark_experiments/avg_bench_parallel_notiled_reduction.csv")
+    df_parallel_notiled_atomics = pd.read_csv(
+        "all_benchmark_results/benchmark_experiments/avg_bench_parallel_notiled_atomic.csv")
 
     df_sequential = pd.read_csv("all_benchmark_results/benchmark_experiments/avg_bench_sequential.csv")
 
-    df_tiled_reduction = pd.read_csv("all_benchmark_results/benchmark_experiments/avg_bench_parallel_tiled_reduction.csv")
+    df_tiled_reduction = pd.read_csv(
+        "all_benchmark_results/benchmark_experiments/avg_bench_parallel_tiled_reduction.csv")
     df_tiled_atomics = pd.read_csv("all_benchmark_results/benchmark_experiments/avg_bench_parallel_tiled_atomic.csv")
 
     df_tiled_reduction.columns.str.strip()
