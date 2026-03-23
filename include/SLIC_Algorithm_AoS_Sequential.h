@@ -47,7 +47,6 @@ class SLIC_Algorithm_AoS_Sequential: public SLIC_Algorithm_AoS {
             this->buff_b = (double *) malloc(this->K_max * sizeof(double));
             this->buff_count = (int *) malloc(this->K_max * sizeof(int));
         }
-        void Initialization() override;
         void iteration() override;
         void update_centroids() override;
 

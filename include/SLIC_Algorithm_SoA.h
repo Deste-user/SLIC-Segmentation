@@ -51,6 +51,7 @@ public:
     cv::Mat display_boundaries() override;
     float calculate_gradient(int x, int y) override;
     void clear() override;
+    void Initialization() override;
     ~SLIC_Algorithm_SoA() override {
         delete img;
         delete super_pixels;

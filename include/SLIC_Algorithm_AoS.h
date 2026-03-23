@@ -32,6 +32,7 @@ class SLIC_Algorithm_AoS: public SLIC_Algorithm {
         std::string get_name() const override { return "AoS Parallel SLIC"; }
         DataLayout get_data_layout() const override { return DataLayout::AoS; }
         bool is_parallel() const override { return true; }
+        void Initialization() override;
         int EnforceConnectivity() override ;
         void clear() override;
         float calculate_gradient(int x, int y) override;

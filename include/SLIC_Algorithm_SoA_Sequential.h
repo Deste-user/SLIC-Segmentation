@@ -66,7 +66,6 @@ public:
         this->buff_count = (int*) malloc(this->K_max * sizeof(int));
     }
 
-    void Initialization() override;
     void iteration() override;
     void update_centroids() override;
 

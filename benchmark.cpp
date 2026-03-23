@@ -565,7 +565,7 @@ void profile_AllPhases(const BenchmarkConfig& cfg, SLIC_Algorithm* algo) {
         auto start_update = high_resolution_clock::now();
         algo->update_centroids();
         auto end_update = high_resolution_clock::now();
-        time_update += std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_update - start_update).count(); // Accumulo!
+        time_update += std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end_update - start_update).count();
     }
 
     // 3. Enforce Connectivity
@@ -622,10 +622,11 @@ void display_evolution(SLIC_Algorithm* algo) {
 int main() {
 
     BenchmarkConfig cfg;
+
     if (os::exists("../all_benchmark_results")==false) {
         os::create_directory("../all_benchmark_results");
     }
-    /*get_avg_time_num_thread("aos",cfg);
+    get_avg_time_num_thread("aos",cfg);
     get_avg_time_num_thread("soa",cfg);
     get_time_for_complexity(6, cfg, 8);
 
@@ -641,37 +642,35 @@ int main() {
 
     //Sequential
     std::cout << "\n--- Sequential Benchmark ---\n" << std::endl;
-    run_averaged_benchmark(cfg, 1,false,false);
+    run_averaged_benchmark(cfg, 3,false,false);
 
     std::cout << "\n--- Parallel Benchmark without Tiling and with Reduction ---\n" << std::endl;
     //Parallel without Tiling and with reduction
-    run_averaged_benchmark(cfg, 1,false,true);
+    run_averaged_benchmark(cfg, 3,false,true);
 
     std::cout << "\n--- Parallel Benchmark without Tiling and with Atomic --- \n" << std::endl;
     //Parallel without tiling and with atomic
-    run_averaged_benchmark(cfg,1,false,true,false);
+    run_averaged_benchmark(cfg,3,false,true,false);
 
     std::cout << "\n--- Parallel Benchmark with Tiling and with Reduction ---\n" << std::endl;
     //Parallel with Tiling and with reduction
-    run_averaged_benchmark(cfg, 1,true,true);
+    run_averaged_benchmark(cfg, 3,true,true);
 
     std::cout << "\n--- Parallel Benchmark with Tiling and with Atomic --- \n" << std::endl;
     //Parallel with Tiling and with atomic
-    run_averaged_benchmark(cfg,1,true,true,false);
-    */
+    run_averaged_benchmark(cfg,3,true,true,false);
+
     //Amhdal Law to see if we can parallelize the Enforce Connectivity function
     cv::Mat raw_image = cv::imread(PATH_example);
     cv::Mat image, image_lab;
     cv::resize(raw_image, image, cv::Size(1920, 1080));
     cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
-    SLIC_Algorithm_AoS_Parallel seq_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
+    SLIC_Algorithm_AoS_Sequential seq_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
     SLIC_Algorithm_SoA_Parallel par_soa(image_lab, cfg.K, cfg.m, cfg.iterations);
     profile_AllPhases(cfg, &seq_aos);
 
-
     display_evolution( &seq_aos);
     display_evolution(&par_soa);
-
 
     return 0;
 }

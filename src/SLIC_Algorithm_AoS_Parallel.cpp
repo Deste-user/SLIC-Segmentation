@@ -3,64 +3,6 @@
 #include <omp.h>
 
 
-void SLIC_Algorithm_AoS_Parallel::Initialization() {
-    const int rows= this->image_lab.rows;
-    const int cols= this->image_lab.cols;
-    // Number of grid cells in the horizontal direction.
-    const int grid_w= cols/S;
-#pragma omp parallel
-    {
-        // To initialize the centroids of superpixels in a grid pattern.
-    #pragma omp for schedule(runtime)
-        for (int k=0; k<K;k++) {
-            // Calculate index grid
-            int grid_x= k % grid_w;
-            int grid_y= k / grid_w;
-
-            // Calculate Superpixel position in the grid - center pixel.
-            int x = grid_x * S + S/2;
-            int y = grid_y * S + S/2;
-            // Checks if the center of the S Grid is in the image.
-            if (x < cols && y < rows) {
-                int idx = x + y * cols;
-                spxls[k].val_L= pxls[idx].L;
-                spxls[k].val_a= pxls[idx].A;
-                spxls[k].val_b= pxls[idx].B;
-                spxls[k].centroid_x= pxls[idx].x;
-                spxls[k].centroid_y= pxls[idx].y;
-            }
-        }
-
-    // To adjust centroids to the lowest gradient position in a 3x3 neighborhood
-    #pragma omp for schedule(runtime)
-        for (int k = 0; k < this->K; k++) {
-            float min_gradient = FLT_MAX;
-            int best_x = spxls[k].centroid_x;
-            int best_y = spxls[k].centroid_y;
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    int ny = spxls[k].centroid_y + dy;
-                    int nx = spxls[k].centroid_x + dx;
-                    if (nx > 0 && nx < cols - 1 && ny > 0 && ny < rows - 1) {
-                        float g = calculate_gradient(nx, ny);
-                        if (g < min_gradient) {
-                            min_gradient = g;
-                            best_x = nx;
-                            best_y = ny;
-                        }
-                    }
-                }
-            }
-            spxls[k].centroid_x = best_x;
-            spxls[k].centroid_y = best_y;
-            int idx = best_x + cols * best_y;
-            spxls[k].val_L = pxls[idx].L;
-            spxls[k].val_a = pxls[idx].A;
-            spxls[k].val_b = pxls[idx].B;
-        }
-    }
-}
-
 void SLIC_Algorithm_AoS_Parallel::iteration() {
     const int rows = this->image_lab.rows;
     const int cols = this->image_lab.cols;
@@ -96,8 +38,8 @@ void SLIC_Algorithm_AoS_Parallel::iteration() {
                             if (kx < 0 || kx >= grid_w) continue;
                             int k = k_row_offset + kx;
                             if (k >= 0 && k < K) {
-                                if (abs(spxls[k].centroid_x - x) < 2 * S &&
-                                    abs(spxls[k].centroid_y - y) < 2 * S) {
+                                if (abs(spxls[k].centroid_x - x) < S &&
+                                    abs(spxls[k].centroid_y - y) < S) {
                                     double d = distance_SLIC(spxls[k].val_L, spxls[k].val_a, spxls[k].val_b,
                                                              spxls[k].centroid_x, spxls[k].centroid_y,
                                                              val_L, val_A, val_B, pos_x, pos_y, S, m);
@@ -150,8 +92,8 @@ void SLIC_Algorithm_AoS_Parallel::iteration() {
                                     int k = k_row_offset + kx;
 
                                     if (k >= 0 && k < K) {
-                                        if (abs(spxls[k].centroid_x - x) < 2 * S &&
-                                            abs(spxls[k].centroid_y - y) < 2 * S) {
+                                        if (abs(spxls[k].centroid_x - x) < S &&
+                                            abs(spxls[k].centroid_y - y) < S) {
                                             double d = distance_SLIC(spxls[k].val_L, spxls[k].val_a, spxls[k].val_b,
                                                                      spxls[k].centroid_x,
                                                                      spxls[k].centroid_y, val_L, val_A, val_B, pos_x,

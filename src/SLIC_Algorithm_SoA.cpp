@@ -29,6 +29,64 @@ void SLIC_Algorithm_SoA::clear() {
     }
 }
 
+void SLIC_Algorithm_SoA::Initialization() {
+    int grid_w = this->image_lab.cols/S;
+    int grid_h = this->image_lab.rows / S;
+
+    for (int i =0; i < K; i++) {
+        int grid_x = i % grid_w;
+        int grid_y = i / grid_w;
+        if (grid_y >= grid_h) continue;
+
+        int x = grid_x * S + S / 2;
+        int y = grid_y * S + S / 2;
+
+        x = std::min(x, this->image_lab.cols - 1);
+        y = std::min(y, this->image_lab.rows - 1);
+
+        super_pixels->centroid_x[i] = x;
+        super_pixels->centroid_y[i] = y;
+
+        int idx = y * this->image_lab.cols + x;
+
+        if (idx >= 0 && idx < N) {
+            super_pixels->val_L[i] = img->L[idx];
+            super_pixels->val_a[i] = img->A[idx];
+            super_pixels->val_b[i] = img->B[idx];
+        }
+    }
+
+        // Spostamento su gradiente minimo (3x3)
+    for (int k = 0; k < K; k++) {
+        float min_gradient = FLT_MAX;
+        int best_x = super_pixels->centroid_x[k];
+        int best_y = super_pixels->centroid_y[k];
+
+        // Small cycle to parallelize
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int ny = super_pixels->centroid_y[k] + dy;
+                int nx = super_pixels->centroid_x[k] + dx;
+                if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1) {
+                    float g = calculate_gradient(nx, ny);
+                    if (g < min_gradient) {
+                        min_gradient = g;
+                        best_x = nx;
+                        best_y = ny;
+                    }
+                }
+            }
+        }
+        super_pixels->centroid_x[k] = best_x;
+        super_pixels->centroid_y[k] = best_y;
+        int idx = best_y * this->image_lab.cols + best_x;
+        super_pixels->val_L[k] = img->L[idx];
+        super_pixels->val_a[k] = img->A[idx];
+        super_pixels->val_b[k] = img->B[idx];
+    }
+}
+
+
 
 int SLIC_Algorithm_SoA::EnforceConnectivity() {
         int num_pixels = this->N;

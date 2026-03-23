@@ -6,73 +6,14 @@
 #include "SLIC_Algorithm_SoA_Parallel.h"
 
 
-void SLIC_Algorithm_SoA_Parallel::Initialization() {
-    int grid_w = this->image_lab.cols/S;
-    int grid_h = this->image_lab.rows / S;
-#pragma omp parallel default(none) shared(grid_w, grid_h)
-    {
-        #pragma omp for schedule(runtime)
-        for (int i =0; i < K; i++) {
-            int grid_x = i % grid_w;
-            int grid_y = i / grid_w;
-            if (grid_y >= grid_h) continue;
 
-            int x = grid_x * S + S / 2;
-            int y = grid_y * S + S / 2;
-
-            x = std::min(x, this->image_lab.cols - 1);
-            y = std::min(y, this->image_lab.rows - 1);
-
-            super_pixels->centroid_x[i] = x;
-            super_pixels->centroid_y[i] = y;
-
-            int idx = y * this->image_lab.cols + x;
-
-            if (idx >= 0 && idx < N) {
-                super_pixels->val_L[i] = img->L[idx];
-                super_pixels->val_a[i] = img->A[idx];
-                super_pixels->val_b[i] = img->B[idx];
-            }
-        }
-
-        // Spostamento su gradiente minimo (3x3)
-        #pragma omp for schedule(runtime)
-        for (int k = 0; k < K; k++) {
-            float min_gradient = FLT_MAX;
-            int best_x = super_pixels->centroid_x[k];
-            int best_y = super_pixels->centroid_y[k];
-
-            // Small cycle to parallelize
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    int ny = super_pixels->centroid_y[k] + dy;
-                    int nx = super_pixels->centroid_x[k] + dx;
-                    if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1) {
-                        float g = calculate_gradient(nx, ny);
-                        if (g < min_gradient) {
-                            min_gradient = g;
-                            best_x = nx;
-                            best_y = ny;
-                        }
-                    }
-                }
-            }
-            super_pixels->centroid_x[k] = best_x;
-            super_pixels->centroid_y[k] = best_y;
-            int idx = best_y * this->image_lab.cols + best_x;
-            super_pixels->val_L[k] = img->L[idx];
-            super_pixels->val_a[k] = img->A[idx];
-            super_pixels->val_b[k] = img->B[idx];
-        }
-    }
-}
 
 // Use the pixel centric version - each pixel checks all superpixels in its 2Sx2S regio
 void SLIC_Algorithm_SoA_Parallel::iteration() {
     const int rows = this->image_lab.rows;
     const int cols = this->image_lab.cols;
     const int grid_w = cols/S;
-    const int grid_h = rows/S;  // ← AGGIUNGI QUI
+    const int grid_h = rows/S;
 
 #pragma omp parallel default(none) shared(rows, cols, grid_w, grid_h)
     {
@@ -101,8 +42,8 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
                             int kx = grid_x + nx;
                             if (kx < 0 || kx >= grid_w) continue;
                             int k = k_row_offset + kx;
-                            if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
-                                abs(super_pixels->centroid_y[k] - y) < 2 * S) {
+                            if (abs(super_pixels->centroid_x[k] - x) < S &&
+                                abs(super_pixels->centroid_y[k] - y) < S) {
                                 double d = distance_SLIC(super_pixels->val_L[k], super_pixels->val_a[k],
                                                          super_pixels->val_b[k], super_pixels->centroid_x[k],
                                                          super_pixels->centroid_y[k],
@@ -110,12 +51,11 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
                                 if (d < min_distance) {
                                     min_distance = d;
                                     best_k = k;
-                                    changed = true;
                                 }
                             }
                         }
                     }
-                    if (changed) {
+                    if (best_k >= 0) {
                         img->distances[idx] = (float) min_distance;
                         img->labels[idx] = best_k;
                     }
@@ -140,7 +80,6 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
                             int pos_y = img->y[idx];
                             double min_distance = DBL_MAX;
                             int best_k = -1;
-                            bool changed = false;
 
                             for (int ny = -1; ny <= 1; ny++) {
                                 int ky = grid_y + ny;
@@ -150,8 +89,8 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
                                     int kx = grid_x + nx;
                                     if (kx < 0 || kx >= grid_w) continue;
                                     int k = k_row_offset + kx;
-                                    if (abs(super_pixels->centroid_x[k] - x) < 2 * S &&
-                                        abs(super_pixels->centroid_y[k] - y) < 2 * S) {
+                                    if (abs(super_pixels->centroid_x[k] - x) < S &&
+                                        abs(super_pixels->centroid_y[k] - y) < S) {
                                         double d = distance_SLIC(super_pixels->val_L[k], super_pixels->val_a[k],
                                                                  super_pixels->val_b[k], super_pixels->centroid_x[k],
                                                                  super_pixels->centroid_y[k],
@@ -159,12 +98,11 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
                                         if (d < min_distance) {
                                             min_distance = d;
                                             best_k = k;
-                                            changed = true;
                                         }
                                     }
                                 }
                             }
-                            if (changed) {
+                            if (best_k >= 0) {
                                 img->distances[idx] = (float) min_distance;
                                 img->labels[idx] = best_k;
                             }
@@ -177,7 +115,6 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
 }
 
 void SLIC_Algorithm_SoA_Parallel::update_centroids() {
-    int max_threads = omp_get_max_threads();
     // Parallelizzare l'inizializzazione per first-touch NUMA-friendly
 #pragma omp parallel for schedule(static)
     for (int k = 0; k < K_max; k++) {
@@ -197,7 +134,7 @@ reduction(+: buff_x[:K_max], buff_y[:K_max], buff_L[:K_max], \
 buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])     // si usa nowait poichè non serve aspettare gli altri.
             for (int idx = 0; idx < N; idx++) {
                 int lbl = img->labels[idx];
-                if (lbl >= 0 && lbl < K_max) {
+                if (lbl >= 0 && lbl < K) {
                     buff_x[lbl] += img->x[idx];
                     buff_y[lbl] += img->y[idx];
                     buff_L[lbl] += img->L[idx];
@@ -225,7 +162,7 @@ buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])     // si usa nowait poichè
 #pragma omp parallel for schedule(runtime)
         for (int i = 0; i < this-> N; i++) {
             int lbl= img->labels[i];
-            if (lbl >=0 && lbl < K_max) {
+            if (lbl >=0 && lbl < K) {
 #pragma omp atomic
                 buff_L[lbl] += img->L[i];
 #pragma omp atomic

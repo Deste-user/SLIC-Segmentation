@@ -9,38 +9,36 @@ from fontTools.misc.cython import returns
 dir_generated = "generated_graphs"
 
 def plot_complexity(df):
-
     parallel_df = df[df['Parallel'] == 1].sort_values(by='Image_Size_Factor')
     sequential_df = df[df['Parallel'] == 0].sort_values(by='Image_Size_Factor')
 
+    num_pixels = np.array([307200, 1228800, 2764800, 4915200, 7680000, 11059200])
 
     arrays_time_tmp_parallel = parallel_df['Mean_Time_ms'].values
     arrays_time_tmp_sequential = sequential_df['Mean_Time_ms'].values
-    array_size_tmp = parallel_df['Image_Size_Factor'].values
-
 
     plt.figure(figsize=(10, 6))
+
     if len(arrays_time_tmp_sequential) > 0:
-        # Calcolo pendenza dal primo punto sequenziale (es. x=1, y=8.19)
-        slope = arrays_time_tmp_sequential[0] / array_size_tmp[0]
+        slope_seq = arrays_time_tmp_sequential[0] / num_pixels[0]
+        # O(N): y = mx
+        y_ref_seq = num_pixels * slope_seq
+        plt.plot(num_pixels, y_ref_seq, linestyle='--', color='blue', alpha=0.4, label='O(N) Ideal Sequential')
 
-        # Calcolo la retta ideale: y = x * slope
-        y_ref = array_size_tmp * slope
+    plt.plot(num_pixels, arrays_time_tmp_sequential, marker='o', label='Sequential Actual', color='blue', linewidth=2)
+    plt.plot(num_pixels, arrays_time_tmp_parallel, marker='o', label='Parallel Actual (8 Threads)', color='red', linewidth=2)
 
-        plt.plot(array_size_tmp, y_ref, linestyle='--', color='gray')
+    plt.title('AOS Parallel SLIC Time Complexity', fontsize=14, fontweight='bold')
+    plt.xlabel('Number of Pixels', fontsize=12)
+    plt.ylabel('Mean Time (ms)', fontsize=12)
 
-    plt.title('AOS Parallel SLIC Time Complexity (8 Threads)')
-    plt.xlabel('Image Size Multiplier')
-    plt.ylabel('Mean Time (ms)')
-    plt.xticks(array_size_tmp, [str(size) + 'x' for size in array_size_tmp])
-
-     # Plotting the actual data
-    plt.plot(array_size_tmp, arrays_time_tmp_sequential, marker='o', label='Sequential', color='b')
-    plt.plot(array_size_tmp, arrays_time_tmp_parallel, marker='o', label='Parallel', color='r')
+    plt.xticks(num_pixels, [f"{p/1e6:.1f}M" for p in num_pixels], rotation=45)
 
     plt.legend()
-    plt.grid()
+    plt.grid(True, which="both", ls="--", alpha=0.5)
+    plt.tight_layout()
     plt.savefig(dir_generated + "/complexity_plot.png")
+    plt.show()
 
 
 def plot_graphics_threads(dfs,sequential_time):
@@ -243,51 +241,84 @@ def amdahl_experiment_pie_chart(df):
 
 
 
+def tiled_speedup_analysis(df_tiled, df_notiled, df_sequential, string_name):
+    df_tiled = df_tiled.copy()
+    df_notiled = df_notiled.copy()
 
+    df_tiled['Mode'] = 'Tiled'
+    df_notiled['Mode'] = 'Notiled'
 
+    df = pd.concat([df_tiled, df_notiled], ignore_index=True)
 
+    seq_dict_soa = df_sequential.set_index('Resolution')['SoA_Mean_ms'].to_dict()
+    seq_dict_aos = df_sequential.set_index('Resolution')['AoS_Mean_ms'].to_dict()
 
-def tiled_speedup_analysis(df_tiled, df_notiled, string_name):
-    df_tiled['Mode']= 'Tiled'
-    df_notiled['Mode']= 'Notiled'
+    df['Seq_SoA_ms'] = df['Resolution'].map(seq_dict_soa)
+    df['Seq_AoS_ms'] = df['Resolution'].map(seq_dict_aos)
 
-    df= pd.concat([df_tiled, df_notiled], ignore_index=True)
+    df['SoA_Speedup'] = df['Seq_SoA_ms'] / df['SoA_Mean_ms']
+    df['AoS_Speedup'] = df['Seq_AoS_ms'] / df['AoS_Mean_ms']
 
     res_order = ['640x480', '1280x720', '1920x1080']
+    hue_order = ['Notiled', 'Tiled']
 
-    best_soa = df.groupby(['Resolution','Mode'])['SoA_Mean_ms'].min().reset_index()
-    best_aos = df.groupby(['Resolution','Mode'])['AoS_Mean_ms'].min().reset_index()
+    idx_soa = df.groupby(['Resolution', 'Mode'])['SoA_Speedup'].idxmax()
+    best_soa = df.loc[idx_soa].copy()
 
-    plt.figure(figsize=(10,6))
+    idx_aos = df.groupby(['Resolution', 'Mode'])['AoS_Speedup'].idxmax()
+    best_aos = df.loc[idx_aos].copy()
+
+    best_soa['Config_Label'] = best_soa['Schedule'] + "\n(" + best_soa['Chunk'].astype(str) + ")"
+    best_aos['Config_Label'] = best_aos['Schedule'] + "\n(" + best_aos['Chunk'].astype(str) + ")"
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     sns.set_theme(style="whitegrid")
-    # --- SoA ---
-    plt.subplot(1, 2, 1)
-    sns.barplot(data=best_soa, x='Resolution', y='SoA_Mean_ms', hue='Mode', order=res_order, palette='pastel')
-    plt.title("SoA Best Execution Time Comparison", fontsize=14, fontweight='bold')
-    plt.xlabel("Resolution")
-    plt.ylabel("Execution Time (ms)")
-    plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.legend()
-    # --- AoS ---
-    plt.subplot(1, 2, 2)
-    sns.barplot(data=best_aos, x='Resolution', y='AoS_Mean_ms', hue='Mode', order=res_order, palette='pastel')
-    plt.title("AoS Best Execution Time Comparison", fontsize=14, fontweight='bold')
-    plt.xlabel("Resolution")
-    plt.ylabel("Execution Time (ms)")
-    plt.grid(True, which="both", ls="-", alpha=0.5)
-    plt.legend()
+
+    def add_labels(ax, df_best, metric_col):
+        for i, container in enumerate(ax.containers):
+            mode = hue_order[i]
+            for j, bar in enumerate(container):
+                res = res_order[j]
+                row = df_best[(df_best['Resolution'] == res) & (df_best['Mode'] == mode)]
+
+                if not row.empty:
+                    label = row['Config_Label'].values[0]
+                    height = bar.get_height()
+
+                    ax.annotate(label,
+                                xy=(bar.get_x() + bar.get_width() / 2, height),
+                                xytext=(0, 4),
+                                textcoords="offset points",
+                                ha='center', va='bottom', fontsize=8, color='black')
+
+    ax1 = axes[0]
+    sns.barplot(data=best_soa, x='Resolution', y='SoA_Speedup', hue='Mode',
+                order=res_order, hue_order=hue_order, palette='pastel', ax=ax1)
+    ax1.set_title("SoA Best Speedup Comparison", fontsize=14, fontweight='bold')
+    ax1.set_xlabel("Resolution")
+    ax1.set_ylabel("Speedup (x)")
+    ax1.axhline(y=1.0, color='red', linestyle='--', linewidth=1.5, label='Baseline (Seq)')
+    ax1.grid(True, which="both", ls="-", alpha=0.5)
+    ax1.legend(loc="upper left")
+
+    add_labels(ax1, best_soa, 'SoA_Speedup')
+    ax1.set_ylim(0, ax1.get_ylim()[1] * 1.15)
+
+    ax2 = axes[1]
+    sns.barplot(data=best_aos, x='Resolution', y='AoS_Speedup', hue='Mode',
+                order=res_order, hue_order=hue_order, palette='pastel', ax=ax2)
+    ax2.set_title("AoS Best Speedup Comparison", fontsize=14, fontweight='bold')
+    ax2.set_xlabel("Resolution")
+    ax2.set_ylabel("Speedup (x)")
+    ax2.axhline(y=1.0, color='red', linestyle='--', linewidth=1.5, label='Baseline (Seq)')
+    ax2.grid(True, which="both", ls="-", alpha=0.5)
+    ax2.legend(loc="upper left")
+
+    add_labels(ax2, best_aos, 'AoS_Speedup')
+    ax2.set_ylim(0, ax2.get_ylim()[1] * 1.15)
+
     plt.tight_layout()
     plt.savefig(dir_generated + '/tiled_notiled_comparison_'+ string_name + '.png')
-    plt.show()
-
-    target_res = '1280x720'
-    subset = df[(df['Resolution'] == target_res)].copy()
-
-    subset['Config'] = subset['Schedule'] + " (" + subset['Chunk'].astype(str) + ")"
-    plt.figure(figsize=(14, 6))
-    sns.barplot(data=subset, x='Schedule', y='SoA_Mean_ms', hue='Mode', errorbar=None, palette="magma")
-    plt.title(f"Impatto dello Scheduling su Risoluzione {target_res}")
-    plt.ylabel("Tempo (ms)")
     plt.show()
 
 
@@ -319,35 +350,35 @@ if __name__ == "__main__":
 
     # Generate the complexity plot
 
-    #plot_complexity(df_size)
+    plot_complexity(df_size)
 
 
     # Generate the thread plot
-    #plot_graphics_threads([df_thread_aos.to_dict(orient='records'), df_thread_soa.to_dict(orient='records')],df_sequential[df_sequential['Resolution']=='640x480'].iloc[0])
+    plot_graphics_threads([df_thread_aos.to_dict(orient='records'), df_thread_soa.to_dict(orient='records')],df_sequential[df_sequential['Resolution']=='640x480'].iloc[0])
 
     #Creo dentro la cartella generated i sottodirectory per i diversi tipi di scheduling
     os.mkdir(dir_generated + "/notiled_reduction") if not os.path.exists(dir_generated + "/notiled_reduction") else None
     path = dir_generated + "/notiled_reduction"
     string_case= "notiled_reduction"
-    #plot_scheduling_types(df_sequential,  df_parallel_notiled_reduction, path,string_case, size='x1')
-    #plot_scheduling_types(df_sequential,  df_parallel_notiled_reduction, path,string_case, size='x2')
-    #plot_scheduling_types(df_sequential, df_parallel_notiled_reduction, path,string_case, size='x4')
+    plot_scheduling_types(df_sequential,  df_parallel_notiled_reduction, path,string_case, size='x1')
+    plot_scheduling_types(df_sequential,  df_parallel_notiled_reduction, path,string_case, size='x2')
+    plot_scheduling_types(df_sequential, df_parallel_notiled_reduction, path,string_case, size='x4')
 
 
     os.mkdir(dir_generated + "/notiled_atomics") if not os.path.exists(dir_generated + "/notiled_atomics") else None
     path = dir_generated + "/notiled_atomics"
     string_case= "notiled_atomics"
-    #plot_scheduling_types(df_sequential, df_parallel_notiled_atomics,path,string_case, size='x1')
-    #plot_scheduling_types(df_sequential, df_parallel_notiled_atomics,path,string_case, size='x2')
-    #plot_scheduling_types(df_sequential, df_parallel_notiled_atomics,path,string_case, size='x4')
+    plot_scheduling_types(df_sequential, df_parallel_notiled_atomics,path,string_case, size='x1')
+    plot_scheduling_types(df_sequential, df_parallel_notiled_atomics,path,string_case, size='x2')
+    plot_scheduling_types(df_sequential, df_parallel_notiled_atomics,path,string_case, size='x4')
     amdahl_experiment_pie_chart(df_amdahl)
 
 
     # Histogram for the speedup analysis
 
-    #speed_up_analysis(df_sequential, df_parallel_notiled_reduction, df_parallel_notiled_atomics)
-    #tiled_speedup_analysis(df_tiled_reduction,df_parallel_notiled_reduction, "reduction")
-    #tiled_speedup_analysis(df_tiled_atomics, df_parallel_notiled_atomics, "atomics")
+    speed_up_analysis(df_sequential, df_parallel_notiled_reduction, df_parallel_notiled_atomics)
+    tiled_speedup_analysis(df_tiled_reduction,df_parallel_notiled_reduction,df_sequential, "reduction")
+    tiled_speedup_analysis(df_tiled_atomics, df_parallel_notiled_atomics,df_sequential, "atomics")
 
 
 

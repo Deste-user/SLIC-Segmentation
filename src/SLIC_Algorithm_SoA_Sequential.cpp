@@ -1,56 +1,7 @@
 #include <opencv2/opencv.hpp>
 #include "SLIC_common.h"
 #include "SLIC_Algorithm_SoA_Sequential.h"
-
-
-void SLIC_Algorithm_SoA_Sequential:: Initialization() {
-    int idx = 0;
-    int i=0;
-    // Griglia regolare
-    for (int y = S/2 ; y < this->image_lab.rows; y += S) {
-        for (int x = S/2 ; x < this->image_lab.cols; x += S) {
-            if (i >= K) break;
-            idx= x + this->image_lab.cols*y;
-            super_pixels->centroid_x[i] = x;
-            super_pixels->centroid_y[i] = y;
-            super_pixels->val_L[i] = img->L[idx];
-            super_pixels->val_a[i] = img->A[idx];
-            super_pixels->val_b[i] = img->B[idx];
-            i++;
-        }
-        if (i >= K) break;
-    }
-
-    // Spostamento su gradiente minimo (3x3)
-    for (int k=0 ; k < K; k++) {
-        float min_gradient = FLT_MAX;
-        int best_x = super_pixels->centroid_x[k];
-        int best_y = super_pixels->centroid_y[k];
-
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                int ny = super_pixels->centroid_y[k] + dy;
-                int nx = super_pixels->centroid_x[k] + dx;
-                if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1) {
-                    float g = this->calculate_gradient(nx, ny);
-                    if (g < min_gradient) {
-                        min_gradient = g;
-                        best_x = nx;
-                        best_y = ny;
-                    }
-                }
-            }
-        }
-        super_pixels->centroid_x[k] = best_x;
-        super_pixels->centroid_y[k] = best_y;
-
-        idx = best_y*this->image_lab.cols+best_x;
-        super_pixels->val_L[k] = img->L[idx];
-        super_pixels->val_a[k] = img->A[idx];
-        super_pixels->val_b[k] = img->B[idx];
-    }
-}
-
+/*
 void SLIC_Algorithm_SoA_Sequential:: iteration() {
     // Reset all distances
     for (int i = 0; i < N; i++) {
@@ -86,7 +37,63 @@ void SLIC_Algorithm_SoA_Sequential:: iteration() {
         }
     }
 }
+*/
+void SLIC_Algorithm_SoA_Sequential::iteration() {
+    const int rows = this->image_lab.rows;
+    const int cols = this->image_lab.cols;
+    const int grid_w = cols / S;
+    const int grid_h = rows / S;
 
+    // Scorrimento Pixel-Centric: iteriamo su tutti i pixel dell'immagine
+    for (int y = 0; y < rows; y++) {
+        int grid_y = y / S;
+        for (int x = 0; x < cols; x++) {
+            int idx = x + cols * y;
+            int grid_x = x / S;
+
+            float val_L = img->L[idx];
+            float val_a = img->A[idx];
+            float val_b = img->B[idx];
+            int pos_x = img->x[idx];
+            int pos_y = img->y[idx];
+
+            double min_distance = DBL_MAX;
+            int best_k = -1;
+
+            for (int ny = -1; ny <= 1; ny++) {
+                int ky = grid_y + ny;
+                if (ky < 0 || ky >= grid_h) continue;
+
+                int k_row_offset = ky * grid_w;
+
+                for (int nx = -1; nx <= 1; nx++) {
+                    int kx = grid_x + nx;
+                    if (kx < 0 || kx >= grid_w) continue;
+
+                    int k = k_row_offset + kx;
+
+                    if (abs(super_pixels->centroid_x[k] - x) < S &&
+                        abs(super_pixels->centroid_y[k] - y) < S) {
+
+                        double d = distance_SLIC(super_pixels->val_L[k], super_pixels->val_a[k],
+                                                 super_pixels->val_b[k], super_pixels->centroid_x[k],
+                                                 super_pixels->centroid_y[k],
+                                                 val_L, val_a, val_b, pos_x, pos_y, S, m);
+                        if (d < min_distance) {
+                            min_distance = d;
+                            best_k = k;
+                        }
+                    }
+                }
+            }
+
+            if (best_k >= 0) {
+                img->distances[idx] = (float) min_distance;
+                img->labels[idx] = best_k;
+            }
+        }
+    }
+}
 
 void SLIC_Algorithm_SoA_Sequential:: update_centroids() {
 

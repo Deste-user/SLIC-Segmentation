@@ -82,12 +82,8 @@ public:
 
     bool reduction_parallel;
     ~SLIC_Algorithm_SoA_Parallel() override = default;
-
-    void Initialization() override;
     void iteration() override;
     void update_centroids() override;
-
-
 
 
     std::string get_name() const override {return "SOA Parallel SLIC";}

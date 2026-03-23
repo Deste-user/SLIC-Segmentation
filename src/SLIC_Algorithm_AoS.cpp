@@ -1,5 +1,59 @@
 #include "../include/SLIC_Algorithm_AoS.h"
 
+void SLIC_Algorithm_AoS::Initialization() {
+    const int rows= this->image_lab.rows;
+    const int cols= this->image_lab.cols;
+    const int grid_w= cols/S;
+    for (int k=0; k<K;k++) {
+        int grid_x= k % grid_w;
+        int grid_y= k / grid_w;
+
+        int x = grid_x * S + S/2;
+        int y = grid_y * S + S/2;
+        // Checks if the center of the S Grid is in the image.
+        if (x < cols && y < rows) {
+            int idx = x + y * cols;
+            spxls[k].val_L= pxls[idx].L;
+            spxls[k].val_a= pxls[idx].A;
+            spxls[k].val_b= pxls[idx].B;
+            spxls[k].centroid_x= pxls[idx].x;
+            spxls[k].centroid_y= pxls[idx].y;
+        }
+
+    }
+
+
+    // To adjust centroids to the lowest gradient position in a 3x3 neighborhood
+    for (int k=0; k<K; k++) {
+        float min_gradient= FLT_MAX;
+        int best_x= this->spxls[k].centroid_x;
+        int best_y= this->spxls[k].centroid_y;
+        for (int dy=-1; dy<= 1; dy++) {
+            for (int dx=-1; dx<=1;dx++) {
+                int ny= this->spxls[k].centroid_y + dy;
+                int nx= this->spxls[k].centroid_x + dx;
+                if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1)
+                {
+                    float g= this->calculate_gradient(nx, ny);
+                    if (g < min_gradient) {
+                        min_gradient= g;
+                        best_x= nx;
+                        best_y= ny;
+                    }
+                }
+            }
+        }
+        spxls[k].centroid_x = best_x;
+        spxls[k].centroid_y = best_y;
+        int idx = best_x + cols * best_y;
+        spxls[k].val_L = pxls[idx].L;
+        spxls[k].val_a = pxls[idx].A;
+        spxls[k].val_b = pxls[idx].B;
+    }
+}
+
+
+
 void SLIC_Algorithm_AoS::clear(){
 
     for (int y = 0; y < this->image_lab.rows; y++) {

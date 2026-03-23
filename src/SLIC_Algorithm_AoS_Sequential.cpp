@@ -7,87 +7,63 @@
 #include "SLIC_common.h"
 #include "SLIC_Algorithm_AoS_Sequential.h"
 
-void SLIC_Algorithm_AoS_Sequential::Initialization() {
-    int idx = 0;
-    int i=0;
-    // Regular grid
-    for (int y = S/2 ; y < this->image_lab.rows; y += S) {
-        for (int x = S/2 ; x < this->image_lab.cols; x += S) {
-            if (i >= K) break;
-            idx= x + this->image_lab.cols*y;
-            this->spxls[i].centroid_x = x;
-            this->spxls[i].centroid_y = y;
-            this->spxls[i].val_L = pxls[idx].L;
-            this->spxls[i].val_a = pxls[idx].A;
-            this->spxls[i].val_b = pxls[idx].B;
-            i++;
-        }
-    }
 
-    // To adjust centroids to the lowest gradient position in a 3x3 neighborhood
-    for (int k=0; k<K; k++) {
-        float min_gradient= FLT_MAX;
-        int best_x= this->spxls[k].centroid_x;
-        int best_y= this->spxls[k].centroid_y;
-        for (int dy=-1; dy<= 1; dy++) {
-            for (int dx=-1; dx<=1;dx++) {
-                int ny= this->spxls[k].centroid_y + dy;
-                int nx= this->spxls[k].centroid_x + dx;
-                if (nx > 0 && nx < this->image_lab.cols - 1 && ny > 0 && ny < this->image_lab.rows - 1)
-                {
-                    float g= this->calculate_gradient(nx, ny);
-                    if (g < min_gradient) {
-                        min_gradient= g;
-                        best_x= nx;
-                        best_y= ny;
+void SLIC_Algorithm_AoS_Sequential:: iteration() {
+    const int rows = this->image_lab.rows;
+    const int cols = this->image_lab.cols;
+    const int grid_w = cols / S;
+    const int grid_h = rows / S;
+
+    // Scorrimento Pixel-Centric: iteriamo su tutti i pixel dell'immagine
+    for (int y = 0; y < rows; y++) {
+        int grid_y = y / S;
+        for (int x = 0; x < cols; x++) {
+            int idx = x + cols * y;
+            int grid_x = x / S;
+
+            float val_L = pxls[idx].L;
+            float val_a = pxls[idx].A;
+            float val_b = pxls[idx].B;
+            int pos_x = pxls[idx].x;
+            int pos_y = pxls[idx].y;
+
+            double min_distance = DBL_MAX;
+            int best_k = -1;
+
+            for (int ny = -1; ny <= 1; ny++) {
+                int ky = grid_y + ny;
+                if (ky < 0 || ky >= grid_h) continue;
+
+                int k_row_offset = ky * grid_w;
+
+                for (int nx = -1; nx <= 1; nx++) {
+                    int kx = grid_x + nx;
+                    if (kx < 0 || kx >= grid_w) continue;
+
+                    int k = k_row_offset + kx;
+                    if (k < 0 || k >= K) continue;
+
+                    if (abs(spxls[k].centroid_x - x) < S &&
+                        abs(spxls[k].centroid_y - y) < S) {
+
+                        double d = distance_SLIC(spxls[k].val_L, spxls[k].val_a,
+                                                 spxls[k].val_b, spxls[k].centroid_x,
+                                                 spxls[k].centroid_y,
+                                                 val_L, val_a, val_b, pos_x, pos_y, S, m);
+                        if (d < min_distance) {
+                            min_distance = d;
+                            best_k = k;
+                        }
                     }
                 }
             }
-        }
-        this->spxls[k].centroid_x= best_x;
-        this->spxls[k].centroid_y= best_y;
-        idx= best_y*this->image_lab.cols + best_x;
-        this->spxls[k].val_L= this->pxls[idx].L;
-        this->spxls[k].val_a= this->pxls[idx].A;
-        this->spxls[k].val_b= this->pxls[idx].B;
-    }
-}
 
-void SLIC_Algorithm_AoS_Sequential:: iteration() {
-    //int pixels_updated = 0;
-    for (int i = 0; i < this->N; i++) {
-        pxls[i].distance = DBL_MAX;
-    }
-
-    for (int k=0; k<K;k++) {
-        int x_min = std::max(spxls[k].centroid_x - S, 0);
-        int x_max = std::min(spxls[k].centroid_x + S, this->image_lab.cols);
-        int y_min = std::max(spxls[k].centroid_y - S, 0);
-        int y_max = std::min(spxls[k].centroid_y + S, this->image_lab.rows);
-
-        for (int y=y_min; y<y_max;y++) {
-            for (int x=x_min;x<x_max;x++) {
-                int idx= x + this->image_lab.cols*y;
-                double d = distance_SLIC(
-                    spxls[k].val_L, spxls[k].val_a, spxls[k].val_b,
-                    spxls[k].centroid_x, spxls[k].centroid_y,
-                    pxls[idx].L, pxls[idx].A, pxls[idx].B,
-                    pxls[idx].x, pxls[idx].y,
-                    S, m);
-                if (d < pxls[idx].distance) {
-                    pxls[idx].distance= d;
-                    pxls[idx].label= spxls[k].label;
-                    //pixels_updated++;
-                }
+            if (best_k >= 0) {
+                pxls[idx].distance = (float) min_distance;
+                pxls[idx].label = best_k;
             }
         }
-        /* TO VISUALIZE THE ITERATIONS
-         *cv::Mat img = this->display_boundaries();
-        cv::imshow("img before iteration", img);
-        cv::waitKey(0);
-        */
     }
-    //std::cout << "[DEBUG] Pixels updated: " << pixels_updated << std::endl;
 }
 
 void SLIC_Algorithm_AoS_Sequential:: update_centroids() {
