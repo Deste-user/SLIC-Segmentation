@@ -27,6 +27,7 @@ If the user want to build and execute the benchmark must use these rows:
 mkdir build && cd build
 cmake ..
 make
+./SLIC_Benchmark 
 ```
 After that the user have to install the requirements and then generate the plots using this row:
 ```bash
