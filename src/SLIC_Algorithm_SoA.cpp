@@ -255,7 +255,7 @@ cv::Mat SLIC_Algorithm_SoA::display_boundaries() {
             }
         }
 
-        cv::imshow("Segmentation",output);
+        cv::imshow("Segmentation SoA",output);
         cv::waitKey(0);
         return output;
 }

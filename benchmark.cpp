@@ -610,7 +610,6 @@ void display_evolution(SLIC_Algorithm* algo) {
         algo->update_centroids();
     }
     int K = algo->EnforceConnectivity();
-    //algo->display_boundaries();
     algo->set_K(K);
     algo->update_centroids();
     cv::Mat img1 = algo->display_boundaries();
@@ -626,7 +625,7 @@ int main() {
     if (os::exists("../all_benchmark_results")==false) {
         os::create_directory("../all_benchmark_results");
     }
-    get_avg_time_num_thread("aos",cfg);
+    /*get_avg_time_num_thread("aos",cfg);
     get_avg_time_num_thread("soa",cfg);
     get_time_for_complexity(6, cfg, 8);
 
@@ -658,7 +657,7 @@ int main() {
 
     std::cout << "\n--- Parallel Benchmark with Tiling and with Atomic --- \n" << std::endl;
     //Parallel with Tiling and with atomic
-    run_averaged_benchmark(cfg,3,true,true,false);
+    run_averaged_benchmark(cfg,3,true,true,false);*/
 
     //Amhdal Law to see if we can parallelize the Enforce Connectivity function
     cv::Mat raw_image = cv::imread(PATH_example);
@@ -666,11 +665,17 @@ int main() {
     cv::resize(raw_image, image, cv::Size(1920, 1080));
     cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
     SLIC_Algorithm_AoS_Sequential seq_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
-    SLIC_Algorithm_SoA_Parallel par_soa(image_lab, cfg.K, cfg.m, cfg.iterations);
-    profile_AllPhases(cfg, &seq_aos);
+
+    SLIC_Algorithm_SoA_Parallel par_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
+    //profile_AllPhases(cfg, &seq_aos);
+    cv::imshow("Image 1", image);
+    cv::waitKey(0);
 
     display_evolution( &seq_aos);
-    display_evolution(&par_soa);
+
+    cv::imshow("Image 2", image);
+    cv::waitKey(0);
+    display_evolution(&par_aos);
 
     return 0;
 }

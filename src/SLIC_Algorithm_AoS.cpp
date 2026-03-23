@@ -223,6 +223,7 @@ cv::Mat SLIC_Algorithm_AoS::display_boundaries() {
             lab_mat.at<cv::Vec3b>(y, x)[2] = (uchar) spxls[pxls[idx].label].val_b;
         }
     }
+
     cv::Mat output_mat;
     cv::cvtColor(lab_mat, output_mat, cv::COLOR_Lab2BGR);
 
@@ -238,7 +239,7 @@ cv::Mat SLIC_Algorithm_AoS::display_boundaries() {
             }
         }
     }
-    cv::imshow("Segmentation",output_mat);
+    cv::imshow("Segmentation AoS",output_mat);
     cv::waitKey(0);
 
     return output_mat;
