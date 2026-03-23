@@ -1,14 +1,11 @@
 # Parallel SLIC Superpixels
 
-## Project Description
-Breve introduzione al progetto. Spiega cos'è l'algoritmo SLIC (Simple Linear Iterative Clustering) e qual è l'obiettivo principale di questa repository (es. accelerare l'algoritmo sfruttando il multithreading su CPU, analizzare i colli di bottiglia della memoria e testare diverse strategie di sincronizzazione).
-
 In this repository, there is a analisys of a segmentation algorithm using in the Computer Vision to make a segmentation preserving the boundaries of the original image. The complexity of the algorithm is $O(N)$ where N is the number of pixels. 
 The principal goal of the repository is to try accellerate the algorithm using multithreading of the CPU with the OpenMP framework.
 Here below, there are the original photo and the segmented photo.
-![Original Image](\generated_graphs\original.png)
+![Original Image](./generated_graphs/original.png)
 
-![Segmented Image](\generated_graphs\segmentated.png)
+![Segmented Image](./generated_graphs/segmentated.png)
 
 ## Optimization Tecniques
 The implementation uses an executable benchmark to analyze and identify the best configuration to improve performance. This analysis includes:
@@ -18,13 +15,13 @@ The implementation uses an executable benchmark to analyze and identify the best
 - **OpenMP Scheduling:** Performance analysis varying the scheduling policies (`static`, `dynamic`, `guided`) and chunk dimensions.
 
 
-## Requirement's System
+## System Requirements
 To run the code, the user must have:
 * A C++ Compiler with OpenMP support (e.g., `g++` or `clang++`).
 * OpenCV library to load and process the images.
 * Python 3.x with `pandas`, `matplotlib`, and `seaborn` to generate all the plots.
 
-## ⚙️ Compilation
+## Compilation
 If the user want to build and execute the benchmark must use these rows:
 ```bash
 mkdir build && cd build
