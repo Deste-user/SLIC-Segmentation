@@ -41,17 +41,19 @@ def plot_complexity(df):
     plt.show()
 
 
-def plot_graphics_threads(dfs,sequential_time):
+def plot_graphics_threads(dfs):
     time_array_soa = []
     time_array_aos = []
     num_thread = []
+    base_time_aos = next(item['Avg_Time_ms'] for item in dfs[0] if item['Threads'] == 1)
+    base_time_soa = next(item['Avg_Time_ms'] for item in dfs[1] if item['Threads'] == 1)
     init = False
     for elem in dfs[0]:
-        time_array_aos.append(sequential_time['AoS_Mean_ms']/elem['Avg_Time_ms'])
+        time_array_aos.append(base_time_aos/elem['Avg_Time_ms'])
         num_thread.append(elem['Threads'])
 
     for elem in dfs[1]:
-        time_array_soa.append(sequential_time['SoA_Mean_ms']/elem['Avg_Time_ms'])
+        time_array_soa.append(base_time_soa/elem['Avg_Time_ms'])
 
     plt.figure(figsize=(10,  6))
     plt.title('SLIC Algorithm Speed Up vs Number of Threads')
@@ -357,7 +359,7 @@ if __name__ == "__main__":
 
 
     # Generate the thread plot
-    plot_graphics_threads([df_thread_aos.to_dict(orient='records'), df_thread_soa.to_dict(orient='records')],df_sequential[df_sequential['Resolution']=='640x480'].iloc[0])
+    plot_graphics_threads([df_thread_aos.to_dict(orient='records'), df_thread_soa.to_dict(orient='records')])
 
     #Creo dentro la cartella generated i sottodirectory per i diversi tipi di scheduling
     os.mkdir(dir_generated + "/notiled_reduction") if not os.path.exists(dir_generated + "/notiled_reduction") else None
