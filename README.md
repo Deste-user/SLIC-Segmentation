@@ -3,9 +3,9 @@
 In this repository, there is a analisys of a segmentation algorithm using in the Computer Vision to make a segmentation preserving the boundaries of the original image. The complexity of the algorithm is $O(N)$ where N is the number of pixels. 
 The principal goal of the repository is to try accellerate the algorithm using multithreading of the CPU with the OpenMP framework.
 Here below, there are the original photo and the segmented photo.
-![Original Image](./generated_graphs/original.png)
-
-![Segmented Image](./generated_graphs/segmentated.png)
+| Original Image | Segmented Image |
+|---------------|----------------|
+| <img src="./generated_graphs/original.png" width="100%"> | <img src="./generated_graphs/segmented.png" width="100%"> |
 
 ## Optimization Tecniques
 The implementation uses an executable benchmark to analyze and identify the best configuration to improve performance. This analysis includes:
