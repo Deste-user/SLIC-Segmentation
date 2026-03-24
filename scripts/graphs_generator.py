@@ -229,11 +229,9 @@ def speed_up_analysis(df_sequential, df_parallel_reduction, df_parallel_atomics)
 def amdahl_experiment_pie_chart(df):
     df_index = df.columns.tolist()[:-2]
     df_index = [col.replace("_ms", "") for col in df_index]
-    print(df_index)
     df_values = df.iloc[0].tolist()[:-2]
 
     explode = [0,0,0,0.1]
-    print (df_values)
     fig, ax= plt.subplots()
     wedges, texts,autopct = ax.pie(df_values, labels=df_index,textprops=dict(color="w"), explode=explode,shadow=True, startangle=90, autopct= lambda pct: f"{pct:1.2f}%\n",)
     ax.legend(wedges, df_index,
@@ -296,7 +294,7 @@ def tiled_speedup_analysis(df_tiled, df_notiled, df_sequential, string_name):
     ax1 = axes[0]
     sns.barplot(data=best_soa, x='Resolution', y='SoA_Speedup', hue='Mode',
                 order=res_order, hue_order=hue_order, palette='pastel', ax=ax1)
-    ax1.set_title("SoA Best Speedup Comparison", fontsize=14, fontweight='bold')
+    ax1.set_title(f"SoA with {string_name} - Best Speedup Comparison", fontsize=14, fontweight='bold')
     ax1.set_xlabel("Resolution")
     ax1.set_ylabel("Speedup (x)")
     ax1.axhline(y=1.0, color='red', linestyle='--', linewidth=1.5, label='Baseline (Seq)')
@@ -309,7 +307,7 @@ def tiled_speedup_analysis(df_tiled, df_notiled, df_sequential, string_name):
     ax2 = axes[1]
     sns.barplot(data=best_aos, x='Resolution', y='AoS_Speedup', hue='Mode',
                 order=res_order, hue_order=hue_order, palette='pastel', ax=ax2)
-    ax2.set_title("AoS Best Speedup Comparison", fontsize=14, fontweight='bold')
+    ax2.set_title(f"AoS with {string_name} - Best Speedup Comparison", fontsize=14, fontweight='bold')
     ax2.set_xlabel("Resolution")
     ax2.set_ylabel("Speedup (x)")
     ax2.axhline(y=1.0, color='red', linestyle='--', linewidth=1.5, label='Baseline (Seq)')

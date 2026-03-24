@@ -62,11 +62,12 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
                 }
             }
         }else{
+            int current_tile_size = 2 * this->S;
             #pragma omp for collapse(2) schedule(static)
-            for (int by = 0; by < rows; by += TILE_SIZE) {
-                for (int bx = 0; bx < cols; bx += TILE_SIZE) {
-                    int y_end = std::min(by + TILE_SIZE, this->image_lab.rows);
-                    int x_end = std::min(bx + TILE_SIZE, this->image_lab.cols);
+            for (int by = 0; by < rows; by += current_tile_size) {
+                for (int bx = 0; bx < cols; bx += current_tile_size) {
+                    int y_end = std::min(by + current_tile_size, this->image_lab.rows);
+                    int x_end = std::min(bx + current_tile_size, this->image_lab.cols);
                     for (int y = by; y < y_end; y++) {
                         int grid_y = y / S;
                         for (int x = bx; x < x_end; x++) {
