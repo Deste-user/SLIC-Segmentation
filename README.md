@@ -13,13 +13,14 @@ The implementation uses an executable benchmark to analyze and identify the best
 - **Memory Layout:** A performance comparison between Array of Structures (AoS) and Structure of Arrays (SoA).
 - **Synchronization:** Implementation strategies to avoid race conditions, comparing `Atomics` vs `Reduction`.
 - **OpenMP Scheduling:** Performance analysis varying the scheduling policies (`static`, `dynamic`, `guided`) and chunk dimensions.
+- **Tiling Tecnique**: Using the tiling tecnique to improved the Temporal Locality instead of Spatial Locality (Without Tiling).
 
 
 ## System Requirements
 To run the code, the user must have:
 * A C++ Compiler with OpenMP support (e.g., `g++` or `clang++`).
 * OpenCV library to load and process the images.
-* Python 3.x with `pandas`, `matplotlib`, and `seaborn` to generate all the plots.
+* Python 3.x with `pandas`,`numpy`, `matplotlib`, and `seaborn` to generate all the plots.
 
 ## Compilation
 If the user want to build and execute the benchmark must use these rows:
@@ -29,7 +30,7 @@ cmake ..
 make
 ./SLIC_Benchmark 
 ```
-After that the user have to install the requirements and then generate the plots using this row:
+After that, the user have to install the requirements and then generate the plots using this row:
 ```bash
 pip install -r scripts/requirements.txt
 python scripts/graphs_generator.py 
