@@ -125,8 +125,7 @@ void SLIC_Algorithm_AoS_Parallel::iteration() {
 
 void SLIC_Algorithm_AoS_Parallel::update_centroids() {
 
-    // 2. FIRST TOUCH: Inizializziamo a zero IN PARALLELO
-    // Così ogni core alloca fisicamente la memoria che userà nella sua cache locale (NUMA friendly)
+    // (NUMA friendly)
 #pragma omp parallel for schedule(static)
     for(int i=0; i<K; i++) {
         buff_x[i] = 0.0;
@@ -172,8 +171,6 @@ buff_a[:K], buff_b[:K], buff_count[:K])
         for (int idx = 0; idx < this->N; idx++) {
             int lbl = pxls[idx].label;
             if (lbl >= 0 && lbl < K) {
-                // Aggiornamento atomico: blocca solo la specifica cella di memoria,
-                // non ferma tutto il thread. Molto veloce se le collisioni sono poche.
 #pragma omp atomic
                 buff_L[lbl] += pxls[idx].L;
 #pragma omp atomic

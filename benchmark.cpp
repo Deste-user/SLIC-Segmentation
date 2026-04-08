@@ -625,7 +625,7 @@ int main() {
     if (os::exists("../all_benchmark_results")==false) {
         os::create_directory("../all_benchmark_results");
     }
-    /*
+
     get_avg_time_num_thread("aos",cfg);
     get_avg_time_num_thread("soa",cfg);
     get_time_for_complexity(6, cfg, 8);
@@ -651,7 +651,7 @@ int main() {
     std::cout << "\n--- Parallel Benchmark without Tiling and with Atomic --- \n" << std::endl;
     //Parallel without tiling and with atomic
     run_averaged_benchmark(cfg,3,false,true,false);
-    */
+
     std::cout << "\n--- Parallel Benchmark with Tiling and with Reduction ---\n" << std::endl;
     //Parallel with Tiling and with reduction
     run_averaged_benchmark(cfg, 3,true,true);
@@ -659,7 +659,7 @@ int main() {
     std::cout << "\n--- Parallel Benchmark with Tiling and with Atomic --- \n" << std::endl;
     //Parallel with Tiling and with atomic
     run_averaged_benchmark(cfg,3,true,true,false);
-    /*
+
     //Amhdal Law to see if we can parallelize the Enforce Connectivity function
     cv::Mat raw_image = cv::imread(PATH_example);
     cv::Mat image, image_lab;
@@ -676,7 +676,7 @@ int main() {
 
     cv::imshow("Image 2", image);
     cv::waitKey(0);
-    display_evolution(&par_aos);*/
+    display_evolution(&par_aos);
 
     return 0;
 }

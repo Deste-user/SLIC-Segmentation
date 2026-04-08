@@ -132,7 +132,7 @@ void SLIC_Algorithm_SoA_Parallel::update_centroids() {
         {
 #pragma omp for schedule(runtime) \
 reduction(+: buff_x[:K_max], buff_y[:K_max], buff_L[:K_max], \
-buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])     // si usa nowait poichè non serve aspettare gli altri.
+buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])
             for (int idx = 0; idx < N; idx++) {
                 int lbl = img->labels[idx];
                 if (lbl >= 0 && lbl < K) {
@@ -144,9 +144,7 @@ buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])     // si usa nowait poichè
                     buff_count[lbl]++;
                 }
             }
-            // Implicit Barrier has sum all the arrays.
 
-            // Now each thread can update a portion of the centroids.
 #pragma omp for schedule(runtime)
             for (int k = 0; k < K; k++) {
                 if (buff_count[k] > 0) {
