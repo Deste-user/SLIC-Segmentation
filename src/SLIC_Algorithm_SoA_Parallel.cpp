@@ -116,7 +116,8 @@ void SLIC_Algorithm_SoA_Parallel::iteration() {
 }
 
 void SLIC_Algorithm_SoA_Parallel::update_centroids() {
-    // Parallelizzare l'inizializzazione per first-touch NUMA-friendly
+
+    // NUMA-friendly
 #pragma omp parallel for schedule(static)
     for (int k = 0; k < K_max; k++) {
         buff_x[k] = 0.0;
@@ -127,9 +128,11 @@ void SLIC_Algorithm_SoA_Parallel::update_centroids() {
         buff_count[k] = 0;
     }
 
-    if (this->reduction_parallel) {
 #pragma omp parallel
-        {
+    {
+
+        if (this->reduction_parallel) {
+
 #pragma omp for schedule(runtime) \
 reduction(+: buff_x[:K_max], buff_y[:K_max], buff_L[:K_max], \
 buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])
@@ -145,51 +148,40 @@ buff_a[:K_max], buff_b[:K_max], buff_count[:K_max])
                 }
             }
 
+        } else {
+
 #pragma omp for schedule(runtime)
-            for (int k = 0; k < K; k++) {
-                if (buff_count[k] > 0) {
-                    super_pixels->centroid_x[k] = (int) (buff_x[k] / buff_count[k]);
-                    super_pixels->centroid_y[k] = (int) (buff_y[k] / buff_count[k]);
-                    super_pixels->val_L[k] = (float) (buff_L[k] / buff_count[k]);
-                    super_pixels->val_a[k] = (float) (buff_a[k] / buff_count[k]);
-                    super_pixels->val_b[k] = (float) (buff_b[k] / buff_count[k]);
+            for (int i = 0; i < this-> N; i++) {
+                int lbl= img->labels[i];
+                if (lbl >= 0 && lbl < K) {
+#pragma omp atomic update
+                    buff_L[lbl] += img->L[i];
+#pragma omp atomic update
+                    buff_a[lbl] += img->A[i];
+#pragma omp atomic update
+                    buff_b[lbl] += img->B[i];
+#pragma omp atomic update
+                    buff_x[lbl] += img->x[i];
+#pragma omp atomic update
+                    buff_y[lbl] += img->y[i];
+#pragma omp atomic update
+                    buff_count[lbl]++;
                 }
             }
         }
-    }else {
 
-#pragma omp parallel for schedule(runtime)
-        for (int i = 0; i < this-> N; i++) {
-            int lbl= img->labels[i];
-            if (lbl >=0 && lbl < K) {
-#pragma omp atomic
-                buff_L[lbl] += img->L[i];
-#pragma omp atomic
-                buff_a[lbl] += img->A[i];
-#pragma omp atomic
-                buff_b[lbl] += img->B[i];
-#pragma omp atomic
-                buff_x[lbl] += img->x[i];
-#pragma omp atomic
-                buff_y[lbl] += img->y[i];
-#pragma omp atomic
-                buff_count[lbl]++;
-            }
-
-        }
-
-#pragma omp parallel for schedule(runtime)
+#pragma omp for simd schedule(runtime)
         for (int k = 0; k < K; k++) {
-            if (buff_count[k] > 0) {
-                super_pixels->centroid_x[k] = (int) (buff_x[k] / buff_count[k]);
-                super_pixels->centroid_y[k] = (int) (buff_y[k] / buff_count[k]);
-                super_pixels->val_L[k] = (float) (buff_L[k] / buff_count[k]);
-                super_pixels->val_a[k] = (float) (buff_a[k] / buff_count[k]);
-                super_pixels->val_b[k] = (float) (buff_b[k] / buff_count[k]);
+            int count = buff_count[k];
+            if (count > 0) {
+                double inv = 1.0 / count;
+                super_pixels->centroid_x[k] = (int)   (buff_x[k] * inv);
+                super_pixels->centroid_y[k] = (int)   (buff_y[k] * inv);
+                super_pixels->val_L[k]      = (float) (buff_L[k] * inv);
+                super_pixels->val_a[k]      = (float) (buff_a[k] * inv);
+                super_pixels->val_b[k]      = (float) (buff_b[k] * inv);
             }
         }
-
-
     }
 }
 

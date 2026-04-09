@@ -79,7 +79,6 @@ Result measure_performance(SLIC_Algorithm* algo, int threads, omp_sched_t sched,
         double time=(end - start) * 1000.0;
         //std::cout << "Run " << i << ": " << time << " ms" << std::endl;
         times.push_back(time);
-
     }
 
     //  Calculate the statistics
@@ -602,6 +601,9 @@ void profile_AllPhases(const BenchmarkConfig& cfg, SLIC_Algorithm* algo) {
     algo->clear();
 }
 
+
+
+
 void display_evolution(SLIC_Algorithm* algo) {
     int old_k= algo->k();
     algo->Initialization();
@@ -625,7 +627,6 @@ int main() {
     if (os::exists("../all_benchmark_results")==false) {
         os::create_directory("../all_benchmark_results");
     }
-
     get_avg_time_num_thread("aos",cfg);
     get_avg_time_num_thread("soa",cfg);
     get_time_for_complexity(6, cfg, 8);
@@ -663,12 +664,14 @@ int main() {
     //Amhdal Law to see if we can parallelize the Enforce Connectivity function
     cv::Mat raw_image = cv::imread(PATH_example);
     cv::Mat image, image_lab;
+
+
     cv::resize(raw_image, image, cv::Size(), 4, 4, cv::INTER_CUBIC);
     cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
     SLIC_Algorithm_AoS_Sequential seq_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
-
     SLIC_Algorithm_SoA_Parallel par_aos(image_lab, cfg.K, cfg.m, cfg.iterations);
-    //profile_AllPhases(cfg, &seq_aos);
+    profile_AllPhases(cfg, &seq_aos);
+
     cv::imshow("Image 1", image);
     cv::waitKey(0);
 

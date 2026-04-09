@@ -378,7 +378,6 @@ if __name__ == "__main__":
 
 
     # Histogram for the speedup analysis
-
     speed_up_analysis(df_sequential, df_parallel_notiled_reduction, df_parallel_notiled_atomics)
     tiled_speedup_analysis(df_tiled_reduction,df_parallel_notiled_reduction,df_sequential, "reduction")
     tiled_speedup_analysis(df_tiled_atomics, df_parallel_notiled_atomics,df_sequential, "atomics")
