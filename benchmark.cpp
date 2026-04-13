@@ -178,50 +178,60 @@ int variant_experiment_N_size(const BenchmarkConfig& cfg, const std::string& pat
 
 void get_avg_time_num_thread(const std::string& alg, const BenchmarkConfig& cfg) {
     std::string imgs_path = PATH_images;
-    std::vector<double>mean_times;
+    std::vector<double> mean_times;
     std::vector<std::string> valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"};
-    std::cout << "STRUCTURE TYPE:" << alg << std::endl;
+    std::cout << "STRUCTURE TYPE: " << alg << std::endl;
+
+    std::vector<cv::Mat> preloaded_images;
+    int max_images = 3;
+    std::cout << "Pre-loading up to " << max_images << " images into RAM..." << std::endl;
+
+    for (const auto& entry : os::directory_iterator(imgs_path)) {
+        std::string img_path = entry.path().string();
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        bool is_valid = false;
+        for (const auto& valid_ext : valid_extensions) {
+            if (ext == valid_ext) {
+                is_valid = true;
+                break;
+            }
+        }
+        if (!is_valid || img_path.empty()) continue;
+
+        cv::Mat image = cv::imread(img_path);
+        if (image.empty()) {
+            std::cerr << "Error: Impossible to load the image from " << img_path << std::endl;
+            continue;
+        }
+        cv::Mat image_lab;
+        cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
+        preloaded_images.push_back(image_lab);
+
+        if (preloaded_images.size() >= max_images) {
+            break;
+        }
+    }
+    std::cout << "Pre-loaded " << preloaded_images.size() << " images.\n" << std::endl;
+    // ---------------------------------------------------
+
     for (int t : cfg.threads) {
         std::vector<double> times;
-        std::cout<< "\n--- Testing with " << t << " threads ---" << std::endl;
-        for (const auto& entry : os::directory_iterator(imgs_path)) {
-            std::string img_path = entry.path().string();
-            std::string ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-            bool is_valid = false;
-            for (const auto& valid_ext : valid_extensions) {
-                if (ext == valid_ext) {
-                    is_valid = true;
-                    break;
-                }
-            }
+        std::cout << "\n--- Testing with " << t << " threads ---" << std::endl;
 
-            if (!is_valid) continue;
-
-            if (img_path.empty()) continue;
-
-            cv::Mat image = cv::imread(img_path);
-            if (image.empty()) {
-                std::cerr << "Error: Impossible to load the  image from " << img_path << std::endl;
-                return;
-            }
-            cv::Mat image_lab;
-            cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
+        for (const auto& image_lab : preloaded_images) {
             SLIC_Algorithm* algo = nullptr;
-            if (alg== "aos") {
+            if (alg == "aos") {
                 algo = new SLIC_Algorithm_AoS_Parallel(image_lab, cfg.K, cfg.m, cfg.iterations);
-            }else {
+            } else {
                 algo = new SLIC_Algorithm_SoA_Parallel(image_lab, cfg.K, cfg.m, cfg.iterations);
             }
 
             omp_set_num_threads(t);
-
             omp_set_schedule(omp_sched_static, 0);
-
 
             Result res = measure_performance(algo, t, omp_sched_static, 0, cfg);
             times.push_back(res.mean);
-            //std::cout << "Time (mean): " << res.mean << " ms" << std::endl;
 
             delete algo;
         }
@@ -244,7 +254,6 @@ void get_avg_time_num_thread(const std::string& alg, const BenchmarkConfig& cfg)
     }
     std::cout << "\n>>> Best Threads: " << cfg.threads[best_threads] << " with Avg Time: " << min_time << " ms\n" << std::endl;
     // We want to save all the average times in a CSV file
-    //Create a directory where to save the results, one csv for algorithm
     if (!os::exists("../all_benchmark_results/num_thread_experiments")) {
         os::create_directory("../all_benchmark_results/num_thread_experiments");
     }
@@ -261,7 +270,6 @@ void get_avg_time_num_thread(const std::string& alg, const BenchmarkConfig& cfg)
         csv << cfg.threads[i] << "," << mean_times[i] << "\n";
     }
 }
-
 //This function is to verify the complexity of the SLIC algorithm
 // Doesn't matter the layout of the data structure
 void get_time_for_complexity(int num_factor, const BenchmarkConfig& cfg, int num_thread) {
@@ -380,7 +388,6 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
         chunks = {0};
     }
 
-
     std::string filename = "../all_benchmark_results/benchmark_experiments/avg_bench";
     filename += (parallel ? "_parallel" : "_sequential");
     if (parallel) {
@@ -405,11 +412,23 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
         long num_pixels = res.width * res.height;
         std::cout << "\n=== Testing Resolution: " << res.width << "x" << res.height << " ===" << std::endl;
 
+        std::vector<cv::Mat> preloaded_lab_images;
+        std::cout << "  [Pre-loading " << images.size() << " images at " << res.width << "x" << res.height << "...]" << std::endl;
+        for (const auto& img_path : images) {
+            cv::Mat raw_img = cv::imread(img_path);
+            if (raw_img.empty()) continue;
+            cv::Mat image, image_lab;
+            cv::resize(raw_img, image, res);
+            cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
+            preloaded_lab_images.push_back(image_lab);
+        }
+        if (preloaded_lab_images.empty()) continue;
+        // ------------------------------------------------------------------
+
         for (auto sch : schedules) {
             for (auto chunk : chunks) {
                 double sum_time_aos = 0.0;
                 double sum_time_soa = 0.0;
-
                 double sq_sum_time_aos = 0.0;
                 double sq_sum_time_soa = 0.0;
 
@@ -418,14 +437,7 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
 
                 int processed_count = 0;
 
-                for (const auto& img_path : images) {
-                    cv::Mat raw_img = cv::imread(img_path);
-                    if (raw_img.empty()) continue;
-
-                    cv::Mat image, image_lab;
-                    cv::resize(raw_img, image, res);
-                    cv::cvtColor(image, image_lab, cv::COLOR_BGR2Lab);
-
+                for (const auto& image_lab : preloaded_lab_images) {
                     double time_aos = 0;
                     double time_soa = 0;
 
@@ -434,7 +446,7 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
                         SLIC_Algorithm* aos_par = new SLIC_Algorithm_AoS_Parallel(image_lab, cfg.K, cfg.m, cfg.iterations, reduction);
                         if (tile) aos_par->set_tiling(true);
                         Result res_aos = measure_performance(aos_par, fixed_threads, sch, chunk, cfg);
-                        time_aos = res_aos.mean; // Prendiamo il tempo medio di questa immagine
+                        time_aos = res_aos.mean;
                         delete aos_par;
 
                         // --- SoA Parallel ---
@@ -446,19 +458,19 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
 
                     } else {
                         // --- Sequential ---
-                        //std::cout<< "Sequential AoS \n"<< std::endl;
                         SLIC_Algorithm* aos_seq = new SLIC_Algorithm_AoS_Sequential(image_lab, cfg.K, cfg.m, cfg.iterations);
                         if (tile) aos_seq->set_tiling(true);
                         Result res_aos = measure_performance(aos_seq, 1, omp_sched_static, 0, cfg);
                         time_aos = res_aos.mean;
                         delete aos_seq;
-                        //std::cout<< "Sequential SoA \n"<< std::endl;
+
                         SLIC_Algorithm* soa_seq = new SLIC_Algorithm_SoA_Sequential(image_lab, cfg.K, cfg.m, cfg.iterations);
                         if (tile) soa_seq->set_tiling(true);
                         Result res_soa = measure_performance(soa_seq, 1, omp_sched_static, 0, cfg);
                         time_soa = res_soa.mean;
                         delete soa_seq;
                     }
+
                     sum_time_aos += time_aos;
                     sq_sum_time_aos += (time_aos * time_aos);
 
@@ -468,7 +480,6 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
                     processed_count++;
                     std::cout << "#" << std::flush;
                 }
-
 
                 if (processed_count > 0) {
                     double final_avg_aos = sum_time_aos / processed_count;
@@ -485,7 +496,6 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
                     std::string res_name = std::to_string(res.width) + "x" + std::to_string(res.height);
                     std::string sched_name = parallel ? sched_to_str(sch) : "sequential";
 
-
                     csv << res_name << ","
                         << num_pixels << ","
                         << sched_name << ","
@@ -494,7 +504,6 @@ void run_averaged_benchmark(const BenchmarkConfig& cfg, int num_images_to_test, 
                         << std_aos << ","
                         << final_avg_soa << ","
                         << std_soa << "\n";
-
 
                     std::cout << " -> Done. (AoS: " << (int)final_avg_aos << "ms)(SoA:"<<(int)final_avg_soa<< "ms)" << std::endl;
                 }
@@ -627,9 +636,11 @@ int main() {
     if (os::exists("../all_benchmark_results")==false) {
         os::create_directory("../all_benchmark_results");
     }
+
     get_avg_time_num_thread("aos",cfg);
     get_avg_time_num_thread("soa",cfg);
     get_time_for_complexity(6, cfg, 8);
+
 
     // After this experiment we can see that the best number of threads is 8 for both the data layouts.
     std::string img_path = get_random_image_path(PATH_images);
@@ -653,6 +664,7 @@ int main() {
     //Parallel without tiling and with atomic
     run_averaged_benchmark(cfg,3,false,true,false);
 
+
     std::cout << "\n--- Parallel Benchmark with Tiling and with Reduction ---\n" << std::endl;
     //Parallel with Tiling and with reduction
     run_averaged_benchmark(cfg, 3,true,true);
@@ -660,6 +672,7 @@ int main() {
     std::cout << "\n--- Parallel Benchmark with Tiling and with Atomic --- \n" << std::endl;
     //Parallel with Tiling and with atomic
     run_averaged_benchmark(cfg,3,true,true,false);
+
 
     //Amhdal Law to see if we can parallelize the Enforce Connectivity function
     cv::Mat raw_image = cv::imread(PATH_example);

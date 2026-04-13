@@ -28,7 +28,7 @@ def plot_complexity(df):
     plt.plot(num_pixels, arrays_time_tmp_sequential, marker='o', label='Sequential Actual', color='blue', linewidth=2)
     plt.plot(num_pixels, arrays_time_tmp_parallel, marker='o', label='Parallel Actual (8 Threads)', color='red', linewidth=2)
 
-    plt.title('AOS Parallel SLIC Time Complexity', fontsize=14, fontweight='bold')
+    plt.title('AoS Parallel SLIC Time Complexity', fontsize=14, fontweight='bold')
     plt.xlabel('Number of Pixels', fontsize=12)
     plt.ylabel('Mean Time (ms)', fontsize=12)
 
@@ -39,7 +39,6 @@ def plot_complexity(df):
     plt.tight_layout()
     plt.savefig(dir_generated + "/complexity_plot.png")
     plt.show()
-
 
 def plot_graphics_threads(dfs):
     time_array_soa = []
@@ -189,6 +188,11 @@ def speed_up_analysis(df_sequential, df_parallel_reduction, df_parallel_atomics)
             best_results.append({'Resolution': res, 'Type': f'{impl} AoS', 'Speedup': best_row_aos['Speedup_AoS'], 'Configuration': label_aos})
             best_results.append({'Resolution': res, 'Type': f'{impl} SoA', 'Speedup': best_row_soa['Speedup_SoA'],'Configuration': label_soa})
 
+    #Print all Best Speed Up
+    print("Best Results:")
+    for res in best_results:
+        print(f"Resolution: {res['Resolution']}, Type: {res['Type']}, Speedup: {res['Speedup']:.2f}x, Configuration: {res['Configuration']}")
+
 
     df_best = pd.DataFrame(best_results)
 
@@ -213,7 +217,7 @@ def speed_up_analysis(df_sequential, df_parallel_reduction, df_parallel_atomics)
     hue_order = sorted(df_best['Type'].unique())
 
     for i, container in enumerate(ax.containers):
-        # Otteniamo il tipo corrente (es. "Atomics AoS")
+        # Otteniamo il tipo corrente (es. "Atomic AoS")
         current_type = hue_order[i]
 
         # Filtriamo le etichette per questo tipo specifico, mantenendo l'ordine delle risoluzioni
@@ -271,8 +275,24 @@ def tiled_speedup_analysis(df_tiled, df_notiled, df_sequential, string_name):
     best_soa['Config_Label'] = best_soa['Schedule'] + "\n(" + best_soa['Chunk'].astype(str) + ")"
     best_aos['Config_Label'] = best_aos['Schedule'] + "\n(" + best_aos['Chunk'].astype(str) + ")"
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
     sns.set_theme(style="whitegrid")
+
+    print(f"\n" + "="*60)
+    print(f" SPEEDUP ANALYSIS: {string_name.upper()}")
+    print("="*60)
+
+    print("\n[SoA - Structure of Arrays]")
+    # Ordiniamo per risoluzione e modo per una lettura più semplice
+    best_soa_sorted = best_soa.set_index(['Resolution', 'Mode']).loc[[(r, m) for r in res_order for m in hue_order]].reset_index()
+    for _, row in best_soa_sorted.iterrows():
+        print(f"Res: {row['Resolution']:<10} | Mode: {row['Mode']:<8} | Speedup: {row['SoA_Speedup']:.2f}x | Config: {row['Schedule']} (Chunk {row['Chunk']})")
+
+    print("\n[AoS - Array of Structures]")
+    best_aos_sorted = best_aos.set_index(['Resolution', 'Mode']).loc[[(r, m) for r in res_order for m in hue_order]].reset_index()
+    for _, row in best_aos_sorted.iterrows():
+        print(f"Res: {row['Resolution']:<10} | Mode: {row['Mode']:<8} | Speedup: {row['AoS_Speedup']:.2f}x | Config: {row['Schedule']} (Chunk {row['Chunk']})")
+    print("="*60 + "\n")
 
     def add_labels(ax, df_best, metric_col):
         for i, container in enumerate(ax.containers):
@@ -314,6 +334,7 @@ def tiled_speedup_analysis(df_tiled, df_notiled, df_sequential, string_name):
     ax2.grid(True, which="both", ls="-", alpha=0.5)
     ax2.legend(loc="upper left")
 
+    # Passato correttamente colonna 'AoS_Speedup' per mantenere coerenza logica, l'etichetta visuale è nel titolo
     add_labels(ax2, best_aos, 'AoS_Speedup')
     ax2.set_ylim(0, ax2.get_ylim()[1] * 1.15)
 
@@ -381,12 +402,3 @@ if __name__ == "__main__":
     speed_up_analysis(df_sequential, df_parallel_notiled_reduction, df_parallel_notiled_atomics)
     tiled_speedup_analysis(df_tiled_reduction,df_parallel_notiled_reduction,df_sequential, "reduction")
     tiled_speedup_analysis(df_tiled_atomics, df_parallel_notiled_atomics,df_sequential, "atomics")
-
-
-
-
-
-
-
-
-

@@ -2,6 +2,7 @@
 #define SLIC_SEGMENTATION_ALGORITHM_SLIC_ALGORITHM_AOS_H
 #include "SLIC_common.h"
 #include <opencv2/opencv.hpp>
+#include <new>
 
 struct SuperPixel_AoS {
     int label;
@@ -12,7 +13,7 @@ struct SuperPixel_AoS {
     float val_b;
 };
 
-struct Pixel_AoS {
+struct alignas(std::hardware_destructive_interference_size) Pixel_AoS {
     int label;
     int x;
     int y;
@@ -22,12 +23,10 @@ struct Pixel_AoS {
     float B;
 };
 
-
-
 class SLIC_Algorithm_AoS: public SLIC_Algorithm {
     protected:
-        Pixel_AoS* pxls;
-        SuperPixel_AoS* spxls;
+        Pixel_AoS* pxls = nullptr;
+        SuperPixel_AoS* spxls = nullptr;
     public:
         std::string get_name() const override { return "AoS Parallel SLIC"; }
         DataLayout get_data_layout() const override { return DataLayout::AoS; }
